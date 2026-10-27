@@ -123,7 +123,8 @@ static bool parseRom(const String& hex, uint8_t rom[8]) {
   if(hex.isEmpty()) { memset(rom,0,8);return true; }
   if(hex.length()!=16)return false;
   for(int i=0;i<8;i++) { auto a=hexDigit(hex[2*i]),b=hexDigit(hex[2*i+1]);
-    if(a>15||b>15)return false;rom[i]=(a<<4)|b;
+    if(a>15||b>15)return false;
+    rom[i]=(a<<4)|b;
   }
   return true;
 }
@@ -362,7 +363,7 @@ static void startPortal() {
   WiFi.softAPConfig(ip,ip,IPAddress(255,255,255,0));
   WiFi.softAP(ssid.c_str(),config::AP_PASSWORD);
   dns.start(53,"*",ip);
-  const char* headers[]={"X-Quad-Control"};web.collectHeaders(headers,1);
+  web.collectHeaders("X-Quad-Control");
   web.on("/",HTTP_GET,[]{web.sendHeader("Cache-Control","no-store");web.send_P(200,"text/html; charset=utf-8",WEB_UI);});
   web.on("/api/status",HTTP_GET,[]{jsonResponse(statusJson());});
   web.on("/api/config",HTTP_GET,[]{jsonResponse(settingsJson());});
