@@ -27,26 +27,60 @@ int main() {
   e.update(500100,NAN,NAN,false);e.update(500200,30.0f,12.0f,true);
   assert(std::fabs(e.consumedAh()-consumed)<0.00001f);
   LoadProtection p;
-  // No trip from spikes shorter than 700 ms or stopped motor.
-  p.evaluate(100,true,512,12,true,10,700,0,1500);
-  p.evaluate(500,true,512,12,true,10,700,0,1500);
+  LoadProtection::Settings cfg;
+  cfg.stallA=10;cfg.stallMs=700;
+  // Sustained high current: continuous readings only, no trip on a spike.
+  p.evaluate(100,true,512,12,true,cfg);
+  p.evaluate(500,true,512,12,true,cfg);
   assert(p.trip()==LoadProtection::Trip::None);
-  p.evaluate(801,true,512,12,true,10,700,0,1500);
+  p.evaluate(801,true,512,12,true,cfg);
   assert(p.trip()==LoadProtection::Trip::HighCurrent);
-  p.evaluate(900,false,0,0,true,10,700,0,1500);
-  assert(p.trip()==LoadProtection::Trip::HighCurrent); // latch
+  p.evaluate(900,false,0,0,true,cfg);
+  assert(p.trip()==LoadProtection::Trip::HighCurrent);
   p.resetAfterRelease();
+  p.evaluate(1200,true,512,12,true,cfg);
+  p.evaluate(1500,true,512,6,true,cfg); // interruptions clear the timer
+  p.evaluate(1900,true,512,12,true,cfg);
   assert(p.trip()==LoadProtection::Trip::None);
-  p.evaluate(1200,true,500,0.1f,true,0,700,0.5f,1500);
-  p.evaluate(2600,true,500,0.1f,true,0,700,0.5f,1500);
+  p.resetAfterRelease();
+  cfg.stallA=0;cfg.noLoadBelowA=0.5f;cfg.noLoadMs=1500;
+  p.evaluate(2000,true,500,0.1f,true,cfg);
+  p.evaluate(3400,true,500,0.1f,true,cfg);
   assert(p.trip()==LoadProtection::Trip::None);
-  p.evaluate(2701,true,500,0.1f,true,0,700,0.5f,1500);
+  p.evaluate(3501,true,500,0.1f,true,cfg);
   assert(p.trip()==LoadProtection::Trip::NoLoad);
   p.resetAfterRelease();
-  p.evaluate(3000,true,100,40,true,10,700,0,1500); // ignore tiny startup duty
-  p.evaluate(4000,true,100,40,true,10,700,0,1500);
+  cfg.noLoadBelowA=0;cfg.stallA=10;
+  p.evaluate(4000,true,100,40,true,cfg); // timed stall ignores tiny startup duty
+  p.evaluate(5000,true,100,40,true,cfg);
   assert(p.trip()==LoadProtection::Trip::None);
-  p.evaluate(4200,true,512,NAN,false,10,700,0,1500); // missing INA: degraded mode
+  p.evaluate(5200,true,512,NAN,false,cfg); // missing INA leaves protection inactive
   assert(p.trip()==LoadProtection::Trip::None);
-  std::cout << "energy and load protection tests passed\n";
+  // Emergency threshold trips on the FIRST valid measurement, including tiny PWM.
+  cfg.emergencyA=25;
+  p.evaluate(5300,true,12,24.9f,true,cfg);
+  assert(p.trip()==LoadProtection::Trip::None);
+  p.evaluate(5325,true,12,25.1f,true,cfg);
+  assert(p.trip()==LoadProtection::Trip::EmergencyCurrent);
+  p.resetAfterRelease();
+  p.evaluate(5350,true,12,NAN,false,cfg);
+  assert(p.trip()==LoadProtection::Trip::None);
+  // Independent progressive derating, only after configured sustained overload.
+  cfg.emergencyA=0;cfg.stallA=0;cfg.derateA=7;cfg.derateMs=500;cfg.derateMinimumV=3;
+  for(uint32_t t=6000;t<=10500;t+=25)p.evaluate(t,true,512,8,true,cfg);
+  assert(p.trip()==LoadProtection::Trip::None);
+  assert(p.derateCapVolts()<=4.1f && p.derateCapVolts()>=3.0f);
+  for(uint32_t t=10525;t<=14000;t+=25)p.evaluate(t,true,512,8,true,cfg);
+  assert(p.derateCapVolts()>=3 && p.derateCapVolts()<3.01f);
+  for(uint32_t t=14025;t<=17500;t+=25)p.evaluate(t,true,512,4,true,cfg);
+  assert(p.derateCapVolts()>6.0f); // recovery after dropping below 90% threshold
+  p.evaluate(17525,false,0,0,true,cfg);
+  assert(!p.derating());
+  // Wraparound-safe elapsed time.
+  LoadProtection wraps;
+  cfg.stallA=10;cfg.stallMs=200;cfg.derateA=0;
+  wraps.evaluate(0xffffffaaU,true,512,12,true,cfg);
+  wraps.evaluate(0x00000080U,true,512,12,true,cfg);
+  assert(wraps.trip()==LoadProtection::Trip::HighCurrent);
+  std::cout << "energy and protection tests passed\n";
 }

@@ -24,6 +24,14 @@ int main() {
   assert(upgradeSettings(old,migrated));
   assert(validSettings(migrated) && migrated.rampMs==5000 && migrated.forwardV==7.0f);
   assert(migrated.stallTripA==0.0f && migrated.noLoadBelowA==0.0f);
+  assert(migrated.emergencyTripA==0.0f && migrated.derateTripA==0.0f);
+  LegacySettingsV3 v3{};
+  v3.magic=SETTINGS_MAGIC;v3.version=3;v3.rampMs=1500;
+  v3.forwardV=6;v3.reverseV=4;v3.motorCutoffC=75;v3.gearboxCutoffC=70;
+  v3.stallTripA=9.5f;v3.stallTripMs=800;v3.noLoadTripMs=1500;
+  v3.batteryCapacityAh=7;v3.checksum=legacyV3Checksum(v3);
+  assert(upgradeSettings(v3,migrated) && validSettings(migrated));
+  assert(migrated.stallTripA==9.5f && migrated.emergencyTripA==0.0f);
   old.checksum^=1;
   assert(!upgradeSettings(old,migrated));
   Controller c;
@@ -50,6 +58,14 @@ int main() {
   assert(c.step(6050,i).duty>=510);
   i.thermalLimit=true;
   assert(c.step(6060,i).duty<=427); // 5V/12V limit
+  i.thermalLimit=false;
+  i.currentLimitVolts=3.0f;
+  assert(c.step(6070,i).duty<=256); // derate independent of thermal cap
+  i.emergencyCurrent=true;
+  assert(c.step(6075,i).fault==Fault::EmergencyCurrent);
+  assert(!c.step(6075,i).enabled);
+  i.emergencyCurrent=false;
+  i.currentLimitVolts=12.0f;
   i.charger=true;
   assert(!c.step(6070,i).enabled && c.step(6070,i).state==State::Charging);
   i.charger=false;

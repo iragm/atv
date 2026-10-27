@@ -36,6 +36,7 @@ static bool inaAvailable = false;
 static quad::LoadProtection loadProtection;
 static quad::EnergyTracker energy;
 static float busVolts = NAN;
+static float currentDerateV = 12.0f;
 static float motorAmps = NAN;
 static bool motorHot = false;
 static bool gearboxHot = false;
@@ -64,7 +65,7 @@ static const char* stateName(quad::State s) {
 }
 static const char* faultName(quad::Fault f) {
   switch(f) { case quad::Fault::Direction:return "Direction"; case quad::Fault::Sensor:return "Sensor";
-    case quad::Fault::Overcurrent:return "Motor stall/current"; case quad::Fault::NoLoad:return "Possible no-load"; default:return "None"; }
+    case quad::Fault::Overcurrent:return "Sustained stall current"; case quad::Fault::EmergencyCurrent:return "Emergency overcurrent"; case quad::Fault::NoLoad:return "Possible no-load"; default:return "None"; }
 }
 static const char* sourceName(quad::Source s) {
   switch(s) { case quad::Source::Pedal:return "Pedal"; case quad::Source::Wifi:return "Wi-Fi"; default:return "None"; }
@@ -122,8 +123,7 @@ static bool parseRom(const String& hex, uint8_t rom[8]) {
   if(hex.isEmpty()) { memset(rom,0,8);return true; }
   if(hex.length()!=16)return false;
   for(int i=0;i<8;i++) { auto a=hexDigit(hex[2*i]),b=hexDigit(hex[2*i+1]);
-    if(a>15||b>15)return false;
-    rom[i]=(a<<4)|b;
+    if(a>15||b>15)return false;rom[i]=(a<<4)|b;
   }
   return true;
 }
@@ -187,10 +187,21 @@ static void loadSettings() {
   EEPROM.begin(512);
   EEPROM.get(0,settings);
   if(!quad::validSettings(settings)) {
-    quad::LegacySettingsV2 old{};
-    EEPROM.get(0,old);
-    if(quad::upgradeSettings(old,settings)) Serial.println(F("Migrated v2 settings to v3 (new protection defaults disabled)"));
-    else { settings=quad::Settings{};settings.checksum=quad::settingsChecksum(settings);Serial.println(F("Default settings loaded")); }
+    quad::Settings upgraded;
+    quad::LegacySettingsV3 old3{};
+    quad::LegacySettingsV2 old2{};
+    EEPROM.get(0,old3);
+    if(quad::upgradeSettings(old3,upgraded)) {
+      settings=upgraded;Serial.println(F("Migrated v3 settings to v4"));
+    } else {
+      EEPROM.get(0,old2);
+      if(quad::upgradeSettings(old2,upgraded)) {
+        settings=upgraded;Serial.println(F("Migrated v2 settings to v4"));
+      } else {
+        settings=quad::Settings{};settings.checksum=quad::settingsChecksum(settings);
+        Serial.println(F("Default settings loaded"));
+      }
+    }
   }
   controller.setLimits(controllerLimits());
 }
@@ -205,6 +216,10 @@ static String settingsJson() {
   s="{\"ramp_s\":"+String(settings.rampMs/1000.0f,1)+",\"forward_v\":"+jsonFloat(settings.forwardV,1)+
     ",\"reverse_v\":"+jsonFloat(settings.reverseV,1)+",\"motor_cutoff_c\":"+jsonFloat(settings.motorCutoffC,0)+
     ",\"gearbox_cutoff_c\":"+jsonFloat(settings.gearboxCutoffC,0)+
+    ",\"emergency_trip_a\":"+jsonFloat(settings.emergencyTripA,1)+
+    ",\"derate_trip_a\":"+jsonFloat(settings.derateTripA,1)+
+    ",\"derate_trip_ms\":"+String(settings.derateTripMs)+
+    ",\"derate_minimum_v\":"+jsonFloat(settings.derateMinimumV,1)+
     ",\"stall_trip_a\":"+jsonFloat(settings.stallTripA,1)+
     ",\"stall_trip_ms\":"+String(settings.stallTripMs)+
     ",\"no_load_below_a\":"+jsonFloat(settings.noLoadBelowA,1)+
@@ -240,6 +255,10 @@ static String statusJson() {
     ",\"charger\":"+(chargerPresent?"true":"false")+",\"ina_available\":"+(inaAvailable?"true":"false")+
     ",\"oled_available\":"+(oledAvailable?"true":"false")+
     ",\"load_monitor_trip\":"+String(static_cast<int>(loadProtection.trip()))+
+    ",\"current_limit_v\":"+jsonFloat(currentDerateV,2)+
+    ",\"current_derating\":"+(loadProtection.derating()?"true":"false")+
+    ",\"emergency_monitor_enabled\":"+(settings.emergencyTripA>0?"true":"false")+
+    ",\"derate_monitor_enabled\":"+(settings.derateTripA>0?"true":"false")+
     ",\"stall_monitor_enabled\":"+(settings.stallTripA>0?"true":"false")+
     ",\"no_load_monitor_enabled\":"+(settings.noLoadBelowA>0?"true":"false")+
     ",\"motor_hot\":"+(motorHot?"true":"false")+",\"gearbox_hot\":"+(gearboxHot?"true":"false")+
@@ -265,10 +284,18 @@ static bool numberArg(const char* key,float minVal,float maxVal,float& out) {
 }
 static void handleSettingsPost() {
   if(!authorizedPost())return;
-  float ramp,forward,reverse,motorCut,gearCut,stallA,stallSecs,noLoadA,noLoadSecs,capacityAh;
+  // Prevent remote changes to cutoff thresholds while output can move.
+  if(output.enabled || remoteHeld || digitalRead(config::THROTTLE_PIN)==LOW) {
+    web.send(409,"text/plain","Release throttle and stop motor before changing settings");return;
+  }
+  float ramp,forward,reverse,motorCut,gearCut,emergencyA,derateA,derateSecs,derateMinimumV,stallA,stallSecs,noLoadA,noLoadSecs,capacityAh;
   if(!numberArg("ramp_s",0.1f,30,ramp)||!numberArg("forward_v",0.5f,12,forward)||
      !numberArg("reverse_v",0.5f,12,reverse)||!numberArg("motor_cutoff_c",20,120,motorCut)||
      !numberArg("gearbox_cutoff_c",20,120,gearCut)||
+     !numberArg("emergency_trip_a",0,50,emergencyA)||
+     !numberArg("derate_trip_a",0,50,derateA)||
+     !numberArg("derate_trip_s",0.2f,5,derateSecs)||
+     !numberArg("derate_minimum_v",0.5f,12,derateMinimumV)||
      !numberArg("stall_trip_a",0,50,stallA)||!numberArg("stall_trip_s",0.2f,5,stallSecs)||
      !numberArg("no_load_below_a",0,20,noLoadA)||!numberArg("no_load_trip_s",0.5f,10,noLoadSecs)||
      !numberArg("battery_capacity_ah",1,100,capacityAh)||!web.hasArg("motor_sensor")||!web.hasArg("gearbox_sensor")) {
@@ -278,6 +305,10 @@ static void handleSettingsPost() {
   const uint16_t rampMs=static_cast<uint16_t>(ramp*1000.0f+0.5f);
   updated.rampMs=rampMs;updated.forwardV=forward;updated.reverseV=reverse;
   updated.motorCutoffC=motorCut;updated.gearboxCutoffC=gearCut;
+  updated.emergencyTripA=emergencyA;
+  updated.derateTripA=derateA;
+  updated.derateTripMs=static_cast<uint16_t>(derateSecs*1000.0f+0.5f);
+  updated.derateMinimumV=derateMinimumV;
   updated.stallTripA=stallA;updated.stallTripMs=static_cast<uint16_t>(stallSecs*1000.0f+0.5f);
   updated.noLoadBelowA=noLoadA;updated.noLoadTripMs=static_cast<uint16_t>(noLoadSecs*1000.0f+0.5f);
   updated.batteryCapacityAh=capacityAh;
@@ -295,6 +326,8 @@ static void handleSettingsPost() {
   EEPROM.put(0,updated);
   if(!EEPROM.commit()) {web.send(500,"text/plain","Could not write flash");return;}
   settings=updated;
+  // New limits take effect without clearing a latched fault.
+  loadProtection.resetDerating();currentDerateV=12.0f;
   controller.setLimits(controllerLimits());
   refreshThermal();
   jsonResponse(settingsJson());
@@ -329,7 +362,7 @@ static void startPortal() {
   WiFi.softAPConfig(ip,ip,IPAddress(255,255,255,0));
   WiFi.softAP(ssid.c_str(),config::AP_PASSWORD);
   dns.start(53,"*",ip);
-  web.collectHeaders("X-Quad-Control");
+  const char* headers[]={"X-Quad-Control"};web.collectHeaders(headers,1);
   web.on("/",HTTP_GET,[]{web.sendHeader("Cache-Control","no-store");web.send_P(200,"text/html; charset=utf-8",WEB_UI);});
   web.on("/api/status",HTTP_GET,[]{jsonResponse(statusJson());});
   web.on("/api/config",HTTP_GET,[]{jsonResponse(settingsJson());});
@@ -363,9 +396,11 @@ static void drawDisplay() {
   else snprintf(line,sizeof(line),"Temp probe(s) missing");
   display.drawStr(0,46,line);
   if(motorHot||gearboxHot)snprintf(line,sizeof(line),"HOT %s 5V LIMIT",motorHot?(gearboxHot?"M+G":"M"):"G");
+  else if(output.fault==quad::Fault::EmergencyCurrent)snprintf(line,sizeof(line),"EMERGENCY CURRENT CUT");
   else if(output.fault==quad::Fault::Overcurrent)snprintf(line,sizeof(line),"STALL CURRENT CUT");
   else if(output.fault==quad::Fault::NoLoad)snprintf(line,sizeof(line),"POSSIBLE NO-LOAD CUT");
   else if(output.fault!=quad::Fault::None)snprintf(line,sizeof(line),"FAULT: %s",faultName(output.fault));
+  else if(loadProtection.derating())snprintf(line,sizeof(line),"LOAD LIMIT %.1fV",currentDerateV);
   else {
     const auto recent=energy.recent(millis());
     const float remain=energy.minutesRemaining(millis(),settings.batteryCapacityAh);
@@ -384,7 +419,7 @@ void setup() {
   disableDrive();
   pinMode(config::THROTTLE_PIN,INPUT); // GPIO16 requires external pull-up
   pinMode(config::CHARGER_PIN,INPUT);  // jack sense needs external pull-up
-  Serial.begin(115200);Serial.println(F("Quad controller rev E v0.3"));
+  Serial.begin(115200);Serial.println(F("Quad controller rev F v0.4"));
   loadSettings();
   Wire.begin(config::I2C_SDA_PIN,config::I2C_SCL_PIN);Wire.setClock(100000);
   inaAvailable=writeInaRegister(0x00,0x4127)&&pollIna();
@@ -403,8 +438,18 @@ void loop() {
     lastIna=now;
     inaAvailable=pollIna();
     energy.update(now,motorAmps,busVolts,inaAvailable);
-    loadProtection.evaluate(now,output.enabled,output.duty,motorAmps,inaAvailable,
-      settings.stallTripA,settings.stallTripMs,settings.noLoadBelowA,settings.noLoadTripMs);
+    quad::LoadProtection::Settings thresholds;
+    thresholds.emergencyA=settings.emergencyTripA;
+    thresholds.derateA=settings.derateTripA;
+    thresholds.derateMs=settings.derateTripMs;
+    thresholds.derateMinimumV=settings.derateMinimumV;
+    thresholds.stallA=settings.stallTripA;
+    thresholds.stallMs=settings.stallTripMs;
+    thresholds.noLoadBelowA=settings.noLoadBelowA;
+    thresholds.noLoadMs=settings.noLoadTripMs;
+    loadProtection.evaluate(now,output.enabled,output.duty,motorAmps,inaAvailable,thresholds);
+    currentDerateV=loadProtection.derateCapVolts();
+    if(loadProtection.trip()!=quad::LoadProtection::Trip::None) disableDrive(); // do not await next control tick
   }
   pollTemperatures(now);
   if(static_cast<uint32_t>(now-lastControl)>=config::INPUT_PERIOD_MS) {
@@ -419,10 +464,15 @@ void loop() {
     chargerPresent=digitalRead(config::CHARGER_PIN)==HIGH;
     adc=readDirectionAdc();
     physicalDirection=quad::decodeDirection(adc,config::FORWARD_MIN,config::FORWARD_MAX,config::REVERSE_MIN,config::REVERSE_MAX);
-    const quad::Input input{pedal,wifi,chargerPresent,physicalDirection,remoteDirection,
-      false,loadProtection.trip()==quad::LoadProtection::Trip::HighCurrent,
-      loadProtection.trip()==quad::LoadProtection::Trip::NoLoad,
-      motorHot||gearboxHot,supplyForPwm()};
+    quad::Input input;
+    input.physicalPressed=pedal;input.wifiPressed=wifi;input.charger=chargerPresent;
+    input.physicalDirection=physicalDirection;input.wifiDirection=remoteDirection;
+    input.overcurrent=loadProtection.trip()==quad::LoadProtection::Trip::HighCurrent;
+    input.emergencyCurrent=loadProtection.trip()==quad::LoadProtection::Trip::EmergencyCurrent;
+    input.noLoad=loadProtection.trip()==quad::LoadProtection::Trip::NoLoad;
+    input.thermalLimit=motorHot||gearboxHot;
+    input.currentLimitVolts=currentDerateV;
+    input.supplyVolts=supplyForPwm();
     output=controller.step(now,input);
     applyDrive(output);
     // Only clear a latched fault after all commands are released AND output

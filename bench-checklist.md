@@ -31,7 +31,9 @@
 - [ ] Secure quad with driven wheels unloaded before powering driver; use current-limited bench source where practicable.
 - [ ] Check direction and PWM response at low duty, verify both enable pins have good levels.
 - [ ] Verify correct motor coast/brake behavior when EN is low for your IBT-2 board.
-- [ ] Capture normal unloaded, flat-ground, starting and near-stall current with a calibrated meter. Only then enable the configurable high-current trip; test both momentary inrush (should not trip) and sustained high current (must disable motor output and require throttle release).
+- [ ] Capture normal unloaded, flat-ground, starting and near-stall current with a calibrated meter. Only then enable calibrated derate, timed stall and emergency trip thresholds; test both momentary inrush (should not trip) and sustained high current (must disable motor output and require throttle release).
+- [ ] Test first-sample emergency cutoff with an artificial above-threshold current reading at low PWM, and verify PWM and EN go LOW. Account for INA conversion and application-loop latency.
+- [ ] Test derating for >configured delay: voltage-equivalent cap falls steadily, never below the configured floor. Confirm recovery below 90% threshold and reset after throttle release.
 - [ ] Test the optional low-current/no-load detector first with wheels unloaded. Beware normal low-load motion, downhill travel, and false positives. Disable it if traction cannot be inferred reliably from the observed currents.
 - [ ] Verify the 5-minute current average integrates idle intervals, the peak capture and motor-branch Ah/Wh against an external wattmeter.
 - [ ] Enter a known approximate battery charge reference in the portal and verify runtime estimate appears only after at least 30s of valid readings, becomes unavailable near zero draw, and is reset after power cycling.

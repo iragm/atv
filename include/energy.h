@@ -91,37 +91,88 @@ class EnergyTracker {
   float usedSinceReferenceAh_ = 0;
 };
 
-// Threshold 0 disables either heuristic. Current is the motor's DC INPUT
-// supply current, NOT winding current. No-load can be triggered by downhill
-// travel, loss of mechanical load, or genuine wheel spin. It is not a slip sensor.
+// Current is measured at the DC motor-branch input, not in motor windings.
+// "Instant" means the first valid sampled reading, NOT an analog hardware trip.
+// Trip thresholds default disabled until calibrated; there is no motion/RPM sensor.
 class LoadProtection {
  public:
-  enum class Trip : uint8_t { None, HighCurrent, NoLoad };
+  enum class Trip : uint8_t { None, HighCurrent, NoLoad, EmergencyCurrent };
+  struct Settings {
+    float emergencyA = 0.0f;
+    float stallA = 0.0f;
+    uint16_t stallMs = 700;
+    float noLoadBelowA = 0.0f;
+    uint16_t noLoadMs = 1500;
+    float derateA = 0.0f;
+    uint16_t derateMs = 700;
+    float derateMinimumV = 2.0f;
+  };
   void evaluate(uint32_t now, bool driving, uint16_t duty, float amps, bool monitorValid,
-                float maxAmps, uint16_t maxDelayMs,
-                float minAmps, uint16_t minDelayMs) {
+                const Settings& limits) {
+    const uint32_t elapsed = initialized_ ? static_cast<uint32_t>(now - lastMs_) : 0;
+    lastMs_ = now;
+    initialized_ = true;
     if (trip_ != Trip::None) return;
-    if (!driving || duty < 205 || !monitorValid || !isfinite(amps) || amps < -1.0f) {
-      highPending_ = lowPending_ = false;
+    if (!driving || duty == 0 || !monitorValid || !isfinite(amps) || amps < -1.0f) {
+      highPending_ = lowPending_ = deratePending_ = false;
+      derateCapV_ = 12.0f;
       return;
     }
-    const bool high = maxAmps > 0 && amps >= maxAmps;
-    const bool low = minAmps > 0 && amps <= minAmps;
-    if (!high) highPending_ = false;
-    else if (!highPending_) { highPending_ = true; highSince_ = now; }
-    else if (static_cast<uint32_t>(now - highSince_) >= maxDelayMs) trip_ = Trip::HighCurrent;
-    if (!low) lowPending_ = false;
-    else if (!lowPending_) { lowPending_ = true; lowSince_ = now; }
-    else if (static_cast<uint32_t>(now - lowSince_) >= minDelayMs) trip_ = Trip::NoLoad;
+    // A high-current spike must be caught even at small PWM startup duty.
+    if (limits.emergencyA > 0 && amps >= limits.emergencyA) {
+      trip_ = Trip::EmergencyCurrent;
+      return;
+    }
+    // A timer must see the condition continuously. Non-monotonic millis() is
+    // never used; subtraction intentionally accommodates uint32 wraparound.
+    const bool high = limits.stallA > 0 && amps >= limits.stallA && duty >= 205;
+    const bool low = limits.noLoadBelowA > 0 && amps <= limits.noLoadBelowA && duty >= 205;
+    if (timedCondition(high, highPending_, highSince_, now, limits.stallMs)) {
+      trip_ = Trip::HighCurrent;
+      return;
+    }
+    if (timedCondition(low, lowPending_, lowSince_, now, limits.noLoadMs)) {
+      trip_ = Trip::NoLoad;
+      return;
+    }
+    // Derate only after a sustained overload. Below 90% of its setpoint, ramp
+    // voltage cap back up slowly. At the threshold, hold to avoid oscillation.
+    // Bound elapsed to avoid a huge jump after delayed polling / millis wrap.
+    const float seconds = (elapsed < 250 ? elapsed : 250) / 1000.0f;
+    const bool overload = limits.derateA > 0 && amps >= limits.derateA && duty >= 205;
+    if (limits.derateA <= 0) {
+      deratePending_ = false;
+      derateCapV_ = 12.0f;
+    } else if (timedCondition(overload, deratePending_, derateSince_, now, limits.derateMs)) {
+      // Cap reduces 2 equivalent volts/s while overload persists.
+      derateCapV_ -= 2.0f * seconds;
+    } else if (amps < limits.derateA * 0.9f) {
+      derateCapV_ += 1.0f * seconds;
+    }
+    if (derateCapV_ < limits.derateMinimumV) derateCapV_ = limits.derateMinimumV;
+    if (derateCapV_ > 12.0f) derateCapV_ = 12.0f;
   }
   Trip trip() const { return trip_; }
+  void resetDerating() { deratePending_ = false; derateCapV_ = 12.0f; }
+  float derateCapVolts() const { return derateCapV_; }
+  bool derating() const { return derateCapV_ < 11.99f; }
   void resetAfterRelease() {
     trip_ = Trip::None;
-    highPending_ = lowPending_ = false;
+    highPending_ = lowPending_ = deratePending_ = false;
+    derateCapV_ = 12.0f;
   }
  private:
+  static bool timedCondition(bool condition, bool& pending, uint32_t& since,
+                             uint32_t now, uint16_t durationMs) {
+    if (!condition) { pending = false; return false; }
+    if (!pending) { pending = true; since = now; return false; }
+    return static_cast<uint32_t>(now - since) >= durationMs;
+  }
   Trip trip_ = Trip::None;
-  bool highPending_ = false, lowPending_ = false;
-  uint32_t highSince_ = 0, lowSince_ = 0;
+  bool highPending_ = false, lowPending_ = false, deratePending_ = false;
+  uint32_t highSince_ = 0, lowSince_ = 0, derateSince_ = 0;
+  uint32_t lastMs_ = 0;
+  bool initialized_ = false;
+  float derateCapV_ = 12.0f;
 };
 }

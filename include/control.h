@@ -1,10 +1,11 @@
 #pragma once
 #include <stdint.h>
+#include <math.h>
 
 namespace quad {
 enum class Direction : uint8_t { Invalid, Forward, Reverse };
 enum class State : uint8_t { WaitRelease, Ready, Ramp, ReleaseHold, Charging, Fault };
-enum class Fault : uint8_t { None, Direction, Sensor, Overcurrent, NoLoad };
+enum class Fault : uint8_t { None, Direction, Sensor, Overcurrent, NoLoad, EmergencyCurrent };
 enum class Source : uint8_t { None, Pedal, Wifi };
 
 struct Limits {
@@ -21,8 +22,10 @@ struct Input {
   Direction wifiDirection = Direction::Invalid;
   bool sensorFault = false;
   bool overcurrent = false;
+  bool emergencyCurrent = false;
   bool noLoad = false;
   bool thermalLimit = false;
+  float currentLimitVolts = 12.0f;
   float supplyVolts = 12.0f; // nominal fallback if INA226 is missing
 };
 struct Output {
@@ -42,8 +45,9 @@ class Controller {
   void setLimits(const Limits& limits) { limits_ = limits; }
   Output step(uint32_t now, const Input& in) {
     // Center OFF removes switched power, even if Wi-Fi requests motion.
-    if (in.charger || in.physicalDirection == Direction::Invalid || in.sensorFault || in.overcurrent || in.noLoad) {
-      if (in.overcurrent) fault_ = Fault::Overcurrent;
+    if (in.charger || in.physicalDirection == Direction::Invalid || in.sensorFault || in.overcurrent || in.emergencyCurrent || in.noLoad) {
+      if (in.emergencyCurrent) fault_ = Fault::EmergencyCurrent;
+      else if (in.overcurrent) fault_ = Fault::Overcurrent;
       else if (in.noLoad) fault_ = Fault::NoLoad;
       else if (in.sensorFault) fault_ = Fault::Sensor;
       else if (!in.charger && in.physicalDirection == Direction::Invalid) fault_ = Fault::Direction;
@@ -126,7 +130,9 @@ class Controller {
  private:
   uint16_t maximumDuty(Direction d, const Input& in) const {
     const float setpoint = d == Direction::Forward ? limits_.maxForwardV : limits_.maxReverseV;
-    const float voltage = in.thermalLimit && setpoint > 5.0f ? 5.0f : setpoint;
+    float voltage = in.thermalLimit && setpoint > 5.0f ? 5.0f : setpoint;
+    if (isfinite(in.currentLimitVolts) && in.currentLimitVolts >= 0.0f &&
+        in.currentLimitVolts < voltage) voltage = in.currentLimitVolts;
     const float supply = (in.supplyVolts >= 5.0f && in.supplyVolts <= 17.0f) ? in.supplyVolts : 12.0f;
     float cap = 1023.0f * voltage / supply;
     if (cap > 1023.0f) cap = 1023.0f;

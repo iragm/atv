@@ -3,7 +3,7 @@
 [![Firmware](https://github.com/iragm/atv/actions/workflows/firmware.yml/badge.svg)](https://github.com/iragm/atv/actions/workflows/firmware.yml)
 ![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)
 
-A bench-testable **ESP8266 D1 mini + IBT-2/BTS7960** controller for an experimental 12V AGM conversion of a 6V ride-on ATV. It supports a physical throttle, Wi-Fi captive-portal dashboard, adjustable acceleration and voltage-equivalent limits, DS18B20 temperature derating, INA226 telemetry and optional OLED. **Motor outputs are enabled in this firmware**, not a simulator. Design revision **E**, firmware **v0.3**.
+A bench-testable **ESP8266 D1 mini + IBT-2/BTS7960** controller for an experimental 12V AGM conversion of a 6V ride-on ATV. It supports a physical throttle, Wi-Fi captive-portal dashboard, adjustable acceleration and voltage-equivalent limits, DS18B20 temperature derating, INA226 telemetry and optional OLED. **Motor outputs are enabled in this firmware**, not a simulator. Design revision **F**, firmware **v0.4**.
 
 The **74AHCT02, 74AHCT125 and MCP23008** are removed; no new active logic or discrete-transistor interlock is added. The direction switch uses an analog resistor ladder, and the ESP8266 drives motor enable and PWM signals directly.
 
@@ -72,6 +72,10 @@ python3 tests/repo_smoke.py
 | Gearbox sensor | Second discovered DS18B20 | Selected by stable device ROM; can be missing |
 | Gearbox high-temp cutoff | **70°C** | Same 5V equivalent cap and LCD warning |
 | Physical throttle release grace | **2.0s fixed** | Holds last duty up to two seconds, then releases motor; Wi-Fi release stops immediately |
+| Emergency current cutoff | **0A (off)** | First sampled overcurrent reading trips at any nonzero PWM; 0–50A; normal INA poll period 25ms; NOT a hardware instantaneous trip |
+| Derate current threshold | **0A (off)** | 0–50A, sustained overload limit; enabled only after calibration |
+| Derate delay | **0.7s** | 0.2–5s above threshold before limiting output |
+| Minimum derated voltage | **2.0V equivalent** | Lowest PWM-equivalent limit while overloaded; cap reduces at 2V/s, recovers at 1V/s below 90% threshold |
 | Stall current threshold | **0A (off)** | Configurable 0–50A; cuts drive after excessive motor-branch current persists |
 | Stall trip delay | **0.7s** | 0.2–5s; repeated high-current samples required, not a one-sample cutoff |
 | Possible no-load threshold | **0A (off)** | Configurable 0–20A; *heuristic only*, can cut normal low-load travel; not true wheel-spin detection |
@@ -81,17 +85,17 @@ python3 tests/repo_smoke.py
 
 *Voltage-equivalent* is a duty limit: approximately `PWM duty = min(target voltage / measured supply voltage, 1)`. It **does not** generate a true 6V DC waveform: the motor still sees 12V-class PWM pulses. INA226 supply sensing is used when available; otherwise a **nominal 12.0V** is assumed and reported. Thermal limiting overrides either direction setting, never raising a lower configured cap. Unavailable temperature sensors are reported but do not block the controller or falsely trigger derating.
 
-**Software-only protections:** release-to-arm after boot, direction/source change lockout until both controls release, charger-plug inhibit, center-OFF inhibit, physical pedal grace, 600ms Wi-Fi heartbeat expiry. None of these can contain a shorted motor driver. Keep the original fuses and appropriate DC wiring. High-current stall and low-current no-load trips both default to **0 (disabled)** until bench measurements establish credible values. Both need a working INA226. A sustained fault disables PWM and remains latched until the pedal and remote command are released. At low PWM (<20%), these current heuristics are skipped to avoid false trips during startup.
+**Software-only protections:** release-to-arm after boot, direction/source change lockout until both controls release, charger-plug inhibit, center-OFF inhibit, physical pedal grace, 600ms Wi-Fi heartbeat expiry. None of these can contain a shorted motor driver. Keep the original fuses and appropriate DC wiring. Emergency current, sustained stall, derating and low-current no-load protection all default to **0A (disabled)** until bench measurements establish credible values. All current-based protections need a working INA226. A sustained fault disables PWM and remains latched until the pedal and remote command are released. The timed stall and possible no-load heuristics are skipped below 20% PWM; **emergency overcurrent is checked at any nonzero PWM**. The 25ms INA poll interval is not a guaranteed response time if the loop is blocked or the sensor is averaging conversions.
 
-### Battery and stall telemetry, revision E
+### Battery telemetry and three-tier protection, revision F
 
 The external **50A/75mV shunt is on the switched motor branch** in the [existing netlist](wiring-netlist.md). It measures DC input current to the IBT-2. It **does not** directly measure motor-winding current, other vehicle loads, or charger current. The charger is connected on a separate branch, bypassing both the motor shunt and the normal D1 Mini switched power supply. Consequently, **charging current/rate is unavailable in this wiring**; do not interpret the presence of a charger plug or a rising voltage as a measured charging rate.
 
 Live telemetry includes motor input watts (`bus V × input A`), session peak motor current, accumulated **motor-branch** Ah and Wh since boot, and a trailing five-minute current/power average. The remaining runtime estimate is displayed **only** after entering a manually known starting-charge percentage in the **Battery charge reference** section. Enter a new reference after every reboot or major charge. It subtracts monitored motor-branch Ah consumed since that reference, then divides the remaining nominal Ah by average motor current over the last five minutes (minimum 30 seconds of readings, at least 0.1A load). Stationary readings and battery chemistry effects make it approximate; the motor-only sensor excludes accessory loads. AGM batteries deliver less rated capacity at high discharge rates, and terminal voltage under load is not an accurate state-of-charge gauge.
 
-A stalled brushed DC motor typically pulls more current, allowing a sustained over-current cutoff. A freely spinning/unloaded motor can pull *less* current, allowing only an **optional possible no-load warning/cutoff**. From a single current sensor, no software can confidently distinguish wheel spin against the ground from downhill travel, unloaded testing, or a disconnected drivetrain. Proper traction/slip estimation requires added wheel-speed/vehicle-motion sensing. Calibrate both options on a current-limited bench setup, and leave the no-load cutoff off if it causes nuisance trips.
+A stalled brushed DC motor typically pulls more current, allowing a sustained over-current cutoff. Three independent settings now separate an **emergency first-sample cutoff**, **sustained overcurrent duty derating**, and **timed stall cutoff**. The derated voltage cap is reported on the OLED and phone dashboard, and the phone retains a two-minute current trend graph in its own memory. A freely spinning/unloaded motor can pull *less* current, allowing only an **optional possible no-load warning/cutoff**. From a single current sensor, no software can confidently distinguish wheel spin against the ground from downhill travel, unloaded testing, or a disconnected drivetrain. Proper traction/slip estimation requires added wheel-speed/vehicle-motion sensing. Calibrate both options on a current-limited bench setup, and leave the no-load cutoff off if it causes nuisance trips.
 
-**Current monitor calibration:** The 1.5mΩ shunt yields 75mV at 50A, close to the INA226's ~81.92mV full-scale range. The shunt dissipates 3.75W at 50A. Confirm the shunt rating, Kelvin sense wiring, ESP power arrangement and the motor fuse before setting trip thresholds. The current monitor can miss a very fast current spike because of conversion averaging; software monitoring is not a substitute for a properly sized fuse.
+**Current monitor calibration:** The 1.5mΩ shunt yields 75mV at 50A, close to the INA226's ~81.92mV full-scale range. The shunt dissipates 3.75W at 50A. Confirm the shunt rating, Kelvin sense wiring, ESP power arrangement and the motor fuse before setting trip thresholds. The current monitor can miss a very fast current spike because of ADC conversion time, firmware loop blocking and sampling. The emergency cutoff means **first valid measured sample**, not truly immediate hardware cutoff. Software monitoring is not a substitute for a properly sized fuse. All three thresholds default disabled until calibrated.
 
 ## Repository contents
 
@@ -100,7 +104,7 @@ A stalled brushed DC motor typically pulls more current, allowing a sustained ov
 src/main.cpp                    Firmware, REST API, captive DNS and sensors
 include/control.h              Host-tested motor control logic
 include/energy.h               Five-minute load telemetry and fault detection
-include/settings.h             Persistent configuration schema, v2 migration and checksum
+include/settings.h             Persistent configuration schema, v2/v3 migration and checksum
 include/web_ui.h               Tasmota-inspired dark mobile dashboard
 include/config.h               GPIO mapping and fixed device parameters
 platformio.ini                 ESP8266/D1 Mini build dependencies
