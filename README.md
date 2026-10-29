@@ -72,7 +72,7 @@ Keep existing lights on a suitable separately fused switched supply. Confirm the
 | Sustained overload derating | **Off** until calibrated |
 | Stall / possible no-load cutoff | **Off** until calibrated |
 | Battery capacity | **7Ah placeholder**, editable |
-| Charger voltage lockout | **13.0V**; restore under 12.8V for 5s |
+| Charger voltage lockout | **>13.9V**; re-arm at or below 13.7V for 5s |
 | ATV Wi-Fi | `QUAD-<chip ID>` / `quadsetup26`, editable |
 | OTA internet Wi-Fi | Empty by default; enter 2.4GHz network SSID/password |
 
@@ -80,11 +80,11 @@ The dark captive-portal dashboard shows PWM, motor current/power, battery voltag
 
 **OTA:** Download the stable `.bin` above. To install from the ATV web page, set your 2.4GHz internet Wi-Fi credentials and press **Install latest**. The motor is disabled while updating. Alternatively, download `.bin` on your phone and upload it on the same page. Keep the direction switch powered and throttle released. Your phone may need mobile data to download the file before joining the ATV Wi-Fi.
 
-**Charger detection:** The two-wire jack has no insertion signal. Firmware blocks motor output when **INA226 bus voltage > 13.0V** (settable). This is not reliable plug detection: a disconnected/idle charger or a missing INA226 can evade it. Keep the charger unplugged before driving.
+**Charger detection:** The two-wire jack has no insertion signal. Firmware blocks motor output when **INA226 bus voltage > 13.9V** (settable). This is not reliable plug detection: a disconnected/idle charger or a missing INA226 can evade it. Keep the charger unplugged before driving.
 
 **Battery gauge:** Set fully charged and empty voltages in the dashboard (defaults 13.2V and 11.8V), measured on a resting AGM battery. Percentage is linearly calculated from the smoothed INA226 voltage. Under load or while charging the estimate can be wrong. Runtime also requires battery capacity (Ah) and recent motor current; this does not measure accessory or charging current.
 
-**Bench notes:** Check the D1 Mini ADC ladder values, HW-039 behavior with 3.3V inputs, INA226 shunt readings and 13V voltage inhibit. PWM “6V equivalent” still sends 12V pulses to the original 6V motor. Current cutoffs are *sampled software controls*, not instantaneous hardware protection. Use properly rated DC fuses, switches and wire; leave current thresholds off until measured. Charging current cannot be read with the existing motor-branch shunt. Wi-Fi uses local HTTP, so keep the AP password private.
+**Bench notes:** Check the D1 Mini ADC ladder values, HW-039 behavior with 3.3V inputs, INA226 shunt readings and 13.9V voltage inhibit. PWM “6V equivalent” still sends 12V pulses to the original 6V motor. Current cutoffs are *sampled software controls*, not instantaneous hardware protection. Use properly rated DC fuses, switches and wire; leave current thresholds off until measured. Charging current cannot be read with the existing motor-branch shunt. Wi-Fi uses local HTTP, so keep the AP password private.
 
 ## License
 

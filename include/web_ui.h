@@ -52,7 +52,7 @@ static const char WEB_UI[] PROGMEM = R"WEBPAGE(<!doctype html>
 <div class="row"><label for="battery-full">Fully charged voltage <small>13.2V default; measure with battery at rest</small></label><input type="number" id="battery-full" min="10" max="15.5" step="0.05" required></div>
 <div class="row"><label for="battery-empty">Empty voltage <small>11.8V default; measure with battery at rest</small></label><input type="number" id="battery-empty" min="9" max="13.5" step="0.05" required></div>
 <div class="row"><label for="capacity-ah">Battery rated capacity <small>Ah from label, used for runtime estimate</small></label><input type="number" id="capacity-ah" min="1" max="100" step="0.1" required></div>
-<div class="row"><label for="charger-cutoff">Charger voltage lockout <small>Volts, default 13.0; re-arms after 5s below cutoff minus 0.2V.</small></label><input type="number" id="charger-cutoff" min="12.5" max="15.5" step="0.1" required></div>
+<div class="row"><label for="charger-cutoff">Charger voltage lockout <small>Volts, default 13.9; re-arms after 5s at or below 13.7V.</small></label><input type="number" id="charger-cutoff" min="12.5" max="15.5" step="0.1" required></div>
 </div><h2>Wi-Fi</h2><div class="fields">
 <div class="row"><label for="ap-ssid">ATV access point name <small>1–32 characters; reconnect after saving</small></label><input id="ap-ssid" maxlength="32" required></div>
 <div class="row"><label for="ap-password">New ATV Wi-Fi password <small>8–63 characters; blank keeps current</small></label><input id="ap-password" type="password" minlength="8" maxlength="63" autocomplete="new-password" placeholder="Keep existing password"></div>

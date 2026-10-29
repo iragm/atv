@@ -39,7 +39,7 @@ int main() {
   v4.stallTripA=10;v4.stallTripMs=700;v4.noLoadTripMs=1500;
   v4.batteryCapacityAh=7;v4.checksum=legacyV4Checksum(v4);
   assert(upgradeSettings(v4,migrated) && validSettings(migrated));
-  assert(migrated.derateTripA==4.0f && migrated.chargerCutoffV==13.0f);
+  assert(migrated.derateTripA==4.0f && migrated.chargerCutoffV==13.9f);
   assert(strcmp(migrated.apPassword,"quadsetup26")==0);
   assert(migrated.apSsid[0]==0 && migrated.otaSsid[0]==0);
   Settings wifiSettings{};

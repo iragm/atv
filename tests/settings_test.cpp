@@ -6,6 +6,7 @@
 int main() {
   quad::Settings a{};
   assert(a.batteryFullV==13.2f && a.batteryEmptyV==11.8f);
+  assert(a.chargerCutoffV==13.9f);
   a.checksum=quad::settingsChecksum(a);
   assert(quad::validSettings(a));
   a.batteryEmptyV=13.2f;a.checksum=quad::settingsChecksum(a);

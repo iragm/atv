@@ -27,7 +27,7 @@ struct Settings {
   float batteryCapacityAh = 7.0f;  // nominal capacity used for runtime only
   float batteryFullV = 13.2f;     // approximate resting full AGM voltage
   float batteryEmptyV = 11.8f;    // approximate resting empty AGM voltage
-  float chargerCutoffV = 13.0f;
+  float chargerCutoffV = 13.9f;
   char apSsid[33] = {}; // empty means QUAD-<chip-id>
   char apPassword[64] = "quadsetup26";
   char otaSsid[33] = {}; // only used during OTA
