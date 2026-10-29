@@ -82,7 +82,7 @@ The dark captive-portal dashboard shows PWM, motor current/power, battery voltag
 
 **Charger detection:** The two-wire jack has no insertion signal. Firmware blocks motor output when **INA226 bus voltage > 13.0V** (settable). This is not reliable plug detection: a disconnected/idle charger or a missing INA226 can evade it. Keep the charger unplugged before driving.
 
-**Battery gauge:** Set fully charged and empty voltages in the dashboard (defaults 12.8V and 11.8V), measured on a resting AGM battery. Percentage is linearly calculated from the smoothed INA226 voltage. Under load or while charging the estimate can be wrong. Runtime also requires battery capacity (Ah) and recent motor current; this does not measure accessory or charging current.
+**Battery gauge:** Set fully charged and empty voltages in the dashboard (defaults 13.2V and 11.8V), measured on a resting AGM battery. Percentage is linearly calculated from the smoothed INA226 voltage. Under load or while charging the estimate can be wrong. Runtime also requires battery capacity (Ah) and recent motor current; this does not measure accessory or charging current.
 
 **Bench notes:** Check the D1 Mini ADC ladder values, HW-039 behavior with 3.3V inputs, INA226 shunt readings and 13V voltage inhibit. PWM “6V equivalent” still sends 12V pulses to the original 6V motor. Current cutoffs are *sampled software controls*, not instantaneous hardware protection. Use properly rated DC fuses, switches and wire; leave current thresholds off until measured. Charging current cannot be read with the existing motor-branch shunt. Wi-Fi uses local HTTP, so keep the AP password private.
 

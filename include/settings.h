@@ -25,7 +25,7 @@ struct Settings {
   float noLoadBelowA = 0.0f;       // optional heuristic, disabled by default
   uint16_t noLoadTripMs = 1500;
   float batteryCapacityAh = 7.0f;  // nominal capacity used for runtime only
-  float batteryFullV = 12.8f;     // approximate resting full AGM voltage
+  float batteryFullV = 13.2f;     // approximate resting full AGM voltage
   float batteryEmptyV = 11.8f;    // approximate resting empty AGM voltage
   float chargerCutoffV = 13.0f;
   char apSsid[33] = {}; // empty means QUAD-<chip-id>

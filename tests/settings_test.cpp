@@ -5,13 +5,14 @@
 #include <iostream>
 int main() {
   quad::Settings a{};
+  assert(a.batteryFullV==13.2f && a.batteryEmptyV==11.8f);
   a.checksum=quad::settingsChecksum(a);
   assert(quad::validSettings(a));
-  a.batteryEmptyV=12.8f;a.checksum=quad::settingsChecksum(a);
+  a.batteryEmptyV=13.2f;a.checksum=quad::settingsChecksum(a);
   assert(!quad::validSettings(a));
   a.batteryEmptyV=11.8f;a.batteryFullV=NAN;a.checksum=quad::settingsChecksum(a);
   assert(!quad::validSettings(a));
-  a.batteryFullV=12.8f;a.checksum=quad::settingsChecksum(a);
+  a.batteryFullV=13.2f;a.checksum=quad::settingsChecksum(a);
   assert(quad::validSettings(a));
   quad::LegacySettingsV5 old{};
   old.magic=quad::SETTINGS_MAGIC;old.version=5;
@@ -29,7 +30,7 @@ int main() {
   assert(quad::upgradeSettings(old,upgraded));
   assert(upgraded.version==6 && upgraded.rampMs==3800);
   assert(upgraded.batteryCapacityAh==9 && upgraded.chargerCutoffV==13.2f);
-  assert(upgraded.batteryFullV==12.8f && upgraded.batteryEmptyV==11.8f);
+  assert(upgraded.batteryFullV==13.2f && upgraded.batteryEmptyV==11.8f);
   assert(std::strcmp(upgraded.apPassword,"existing-pass")==0);
   assert(std::strcmp(upgraded.otaPassword,"another-password")==0);
   old.checksum++;
