@@ -458,9 +458,9 @@ static void handleOtaUpload() {
       otaUploadOk=false;
   } else if(upload.status==UPLOAD_FILE_END) {
     if(otaBusy && otaUploadOk) otaUploadOk=Update.end(true);
-    else if(otaBusy) Update.abort();
+    else if(otaBusy) Update.end(false);
   } else if(upload.status==UPLOAD_FILE_ABORTED) {
-    if(otaBusy)Update.abort();otaBusy=false;otaUploadOk=false;otaResult="Upload aborted";
+    if(otaBusy)Update.end(false);otaBusy=false;otaUploadOk=false;otaResult="Upload aborted";
   }
 }
 static void runOtaFromUrl() {
