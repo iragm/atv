@@ -5,8 +5,7 @@
 namespace quad {
 
 // Source is the present MOTOR-BRANCH high-side shunt, not a whole-battery shunt.
-// Samples remain volatile. No estimate is shown unless a human supplies a
-// starting state-of-charge reference for this power-on session.
+// Samples remain volatile. SOC comes from the separate voltage gauge.
 class EnergyTracker {
  public:
   void update(uint32_t nowMs, float currentA, float voltageV, bool valid) {
@@ -57,22 +56,15 @@ class EnergyTracker {
   float consumedAh() const { return ah_; }
   float consumedWh() const { return wh_; }
   float peakAmps() const { return sawSample_ ? peakA_ : NAN; }
-  void setChargeReference(float percent) {
-    referencePercent_ = isfinite(percent) && percent >= 0 && percent <= 100 ? percent : NAN;
-    usedSinceReferenceAh_ = ah_;
-  }
-  float startingChargePercent() const { return referencePercent_; }
-  float estimatedPercent(float capacityAh) const {
-    if (!isfinite(referencePercent_) || !isfinite(capacityAh) || capacityAh <= 0) return NAN;
-    const float soc = referencePercent_ - ((ah_ - usedSinceReferenceAh_) / capacityAh * 100.0f);
-    return soc < 0 ? 0 : soc;
-  }
-  float minutesRemaining(uint32_t nowMs, float capacityAh) const {
+  // Runtime uses voltage-derived state of charge, rated Ah, and recent motor draw.
+  float minutesRemaining(uint32_t nowMs, float capacityAh, float chargePercent) const {
     const Recent r = recent(nowMs);
-    const float percent = estimatedPercent(capacityAh);
-    if (!isfinite(percent) || !isfinite(r.amps) || r.observedSeconds < 30 || r.amps < 0.1f) return NAN;
-    return (capacityAh * percent / 100.0f) / r.amps * 60.0f;
+    if (!isfinite(chargePercent) || chargePercent < 0 || chargePercent > 100 ||
+        !isfinite(capacityAh) || capacityAh <= 0 || !isfinite(r.amps) ||
+        r.observedSeconds < 30 || r.amps < 0.1f) return NAN;
+    return (capacityAh * chargePercent / 100.0f) / r.amps * 60.0f;
   }
+
  private:
   static float positive(float a) { return a > 0 ? a : 0; }
   struct Bucket {
@@ -87,8 +79,40 @@ class EnergyTracker {
   uint32_t previousMs_ = 0;
   float previousA_ = 0, previousV_ = 0;
   float ah_ = 0, wh_ = 0, peakA_ = 0;
-  float referencePercent_ = NAN;
-  float usedSinceReferenceAh_ = 0;
+};
+
+// Smoothed voltage-only percentage estimate; not coulomb counting.
+// During motor load voltage sags, and charging raises voltage. The gauge is
+// approximate even though the firmware can compute a precise percentage.
+class BatteryGauge {
+ public:
+  void update(uint32_t nowMs, bool valid, float volts) {
+    if (!valid || !isfinite(volts) || volts < 0.0f || volts > 25.0f) {
+      hasVoltage_ = false; // Never expose a stale percentage when INA226 disappears.
+      return;
+    }
+    if (!hasVoltage_) {
+      filteredV_ = volts;
+      hasVoltage_ = true;
+    } else {
+      const uint32_t elapsed = static_cast<uint32_t>(nowMs - previousMs_);
+      // 10-second low-pass smoothing for PWM/supply noise.
+      const float alpha = static_cast<float>(elapsed) / (10000.0f + elapsed);
+      filteredV_ += alpha * (volts - filteredV_);
+    }
+    previousMs_ = nowMs;
+  }
+  float filteredVolts() const { return hasVoltage_ ? filteredV_ : NAN; }
+  float percent(float emptyV, float fullV) const {
+    if (!hasVoltage_ || !isfinite(emptyV) || !isfinite(fullV) ||
+        fullV - emptyV < 0.2f) return NAN;
+    float pct = 100.0f * (filteredV_ - emptyV) / (fullV - emptyV);
+    return pct < 0 ? 0 : (pct > 100 ? 100 : pct);
+  }
+ private:
+  bool hasVoltage_ = false;
+  uint32_t previousMs_ = 0;
+  float filteredV_ = NAN;
 };
 
 // Current is measured at the DC motor-branch input, not in motor windings.

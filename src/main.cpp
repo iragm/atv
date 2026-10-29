@@ -41,6 +41,7 @@ static bool oledAvailable = false;
 static bool inaAvailable = false;
 static quad::LoadProtection loadProtection;
 static quad::EnergyTracker energy;
+static quad::BatteryGauge batteryGauge;
 static quad::VoltageGuard voltageGuard;
 static bool otaBusy = false, otaRequested = false, otaUploadOk = false;
 static bool rebootQueued = false;
@@ -201,24 +202,30 @@ static void loadSettings() {
   EEPROM.get(0,settings);
   if(!quad::validSettings(settings)) {
     quad::Settings upgraded;
+    quad::LegacySettingsV5 old5{};
     quad::LegacySettingsV4 old4{};
     quad::LegacySettingsV3 old3{};
     quad::LegacySettingsV2 old2{};
+    EEPROM.get(0,old5);
+    if(quad::upgradeSettings(old5,upgraded)) {
+      settings=upgraded;Serial.println(F("Migrated v5 settings to v6"));
+    } else {
     EEPROM.get(0,old4);
     if (quad::upgradeSettings(old4,upgraded)) {
-      settings=upgraded;Serial.println(F("Migrated v4 settings to v5"));
+      settings=upgraded;Serial.println(F("Migrated v4 settings to v6"));
     } else {
     EEPROM.get(0,old3);
     if(quad::upgradeSettings(old3,upgraded)) {
-      settings=upgraded;Serial.println(F("Migrated v3 settings to v5"));
+      settings=upgraded;Serial.println(F("Migrated v3 settings to v6"));
     } else {
       EEPROM.get(0,old2);
       if(quad::upgradeSettings(old2,upgraded)) {
-        settings=upgraded;Serial.println(F("Migrated v2 settings to v5"));
+        settings=upgraded;Serial.println(F("Migrated v2 settings to v6"));
       } else {
         settings=quad::Settings{};settings.checksum=quad::settingsChecksum(settings);
         Serial.println(F("Default settings loaded"));
       }
+    }
     }
     }
   }
@@ -258,6 +265,8 @@ static String settingsJson() {
     ",\"no_load_below_a\":"+jsonFloat(settings.noLoadBelowA,1)+
     ",\"no_load_trip_ms\":"+String(settings.noLoadTripMs)+
     ",\"battery_capacity_ah\":"+jsonFloat(settings.batteryCapacityAh,1)+
+    ",\"battery_full_v\":"+jsonFloat(settings.batteryFullV,2)+
+    ",\"battery_empty_v\":"+jsonFloat(settings.batteryEmptyV,2)+
     ",\"charger_cutoff_v\":"+jsonFloat(settings.chargerCutoffV,1)+
     ",\"ap_ssid\":\""+escapeJson(apName())+"\""+
     ",\"ota_ssid\":\""+escapeJson(String(settings.otaSsid))+"\""+
@@ -283,9 +292,10 @@ static String statusJson() {
     ",\"recent_seconds\":"+jsonFloat(recent.observedSeconds,0)+
     ",\"motor_used_ah\":"+jsonFloat(energy.hasData()?energy.consumedAh():NAN,3)+
     ",\"motor_used_wh\":"+jsonFloat(energy.hasData()?energy.consumedWh():NAN,2)+
-    ",\"charge_reference_pct\":"+jsonFloat(energy.startingChargePercent(),1)+
-    ",\"estimated_charge_pct\":"+jsonFloat(energy.estimatedPercent(settings.batteryCapacityAh),1)+
-    ",\"estimated_remaining_min\":"+jsonFloat(energy.minutesRemaining(millis(),settings.batteryCapacityAh),0)+
+    ",\"battery_filtered_volts\":"+jsonFloat(batteryGauge.filteredVolts(),2)+
+    ",\"estimated_charge_pct\":"+jsonFloat(batteryGauge.percent(settings.batteryEmptyV,settings.batteryFullV),1)+
+    ",\"estimated_remaining_ah\":"+jsonFloat(settings.batteryCapacityAh*batteryGauge.percent(settings.batteryEmptyV,settings.batteryFullV)/100.0f,2)+
+    ",\"estimated_remaining_min\":"+jsonFloat(energy.minutesRemaining(millis(),settings.batteryCapacityAh,batteryGauge.percent(settings.batteryEmptyV,settings.batteryFullV)),0)+
     ",\"charging_amps\":null,\"charging_current_supported\":false"+
     ",\"motor_temp\":"+jsonFloat(motorTempC,1)+",\"gearbox_temp\":"+jsonFloat(gearboxTempC,1)+
     ",\"pwm_supply_volts\":"+jsonFloat(supplyForPwm(),2)+",\"adc\":"+String(adc)+
@@ -339,6 +349,8 @@ static void handleSettingsPost() {
      !numberArg("stall_trip_a",0,50,stallA)||!numberArg("stall_trip_s",0.2f,5,stallSecs)||
      !numberArg("no_load_below_a",0,20,noLoadA)||!numberArg("no_load_trip_s",0.5f,10,noLoadSecs)||
      !numberArg("battery_capacity_ah",1,100,capacityAh)||
+     !numberArg("battery_full_v",10.0f,15.5f,batteryFullV)||
+     !numberArg("battery_empty_v",9.0f,13.5f,batteryEmptyV)||
      !numberArg("charger_cutoff_v",12.5f,15.5f,chargerCutoffV)||!web.hasArg("motor_sensor")||!web.hasArg("gearbox_sensor")) {
     web.send(400,"text/plain","Invalid config values");return;
   }
@@ -352,7 +364,9 @@ static void handleSettingsPost() {
   updated.derateMinimumV=derateMinimumV;
   updated.stallTripA=stallA;updated.stallTripMs=static_cast<uint16_t>(stallSecs*1000.0f+0.5f);
   updated.noLoadBelowA=noLoadA;updated.noLoadTripMs=static_cast<uint16_t>(noLoadSecs*1000.0f+0.5f);
-  updated.batteryCapacityAh=capacityAh;updated.chargerCutoffV=chargerCutoffV;
+  updated.batteryCapacityAh=capacityAh;
+  updated.batteryFullV=batteryFullV;updated.batteryEmptyV=batteryEmptyV;
+  updated.chargerCutoffV=chargerCutoffV;
   // Password fields are intentionally not sent by GET. Blank means keep.
   const auto storeText=[](char* target, size_t capacity, const String& value) {
     memset(target,0,capacity);
@@ -398,13 +412,6 @@ static void handleSettingsPost() {
   refreshThermal();
   jsonResponse(settingsJson());
   if(wifiChanged) {rebootQueued=true;rebootAt=millis()+1500;}
-}
-static void handleChargeReferencePost() {
-  if(!authorizedPost())return;
-  float percent;
-  if(!numberArg("percent",0,100,percent)) {web.send(400,"text/plain","Invalid starting battery charge");return;}
-  energy.setChargeReference(percent);
-  jsonResponse("{\"ok\":true}");
 }
 static void handleDrivePost() {
   if(!authorizedPost())return;
@@ -508,7 +515,6 @@ static void startPortal() {
   web.on("/api/config",HTTP_GET,[]{jsonResponse(settingsJson());});
   web.on("/api/config",HTTP_POST,handleSettingsPost);
   web.on("/api/drive",HTTP_POST,handleDrivePost);
-  web.on("/api/battery/reference",HTTP_POST,handleChargeReferencePost);
   web.on("/api/ota/url",HTTP_POST,handleOtaFromUrl);
   web.on("/api/ota/upload",HTTP_POST,handleOtaUploadDone,handleOtaUpload);
   // OS captive-portal detection URLs; unknown GETs redirect to local UI.
@@ -529,7 +535,8 @@ static void drawDisplay() {
   snprintf(line,sizeof(line),"QUAD %s",stateName(output.state));display.drawStr(0,10,line);
   snprintf(line,sizeof(line),"%s %u%% %s",directionName(output.direction),
     static_cast<unsigned>(output.duty*100UL/config::PWM_RANGE),sourceName(output.source));display.drawStr(0,22,line);
-  if(inaAvailable)snprintf(line,sizeof(line),"%.2fV %.1fA",busVolts,motorAmps);
+  if(inaAvailable)snprintf(line,sizeof(line),"%.2fV %.1fA %.0f%%",busVolts,motorAmps,
+    batteryGauge.percent(settings.batteryEmptyV,settings.batteryFullV));
   else snprintf(line,sizeof(line),"INA missing (12V est)");
   display.drawStr(0,34,line);
   if(motorFound&&gearboxFound)snprintf(line,sizeof(line),"M%.0fC G%.0fC",motorTempC,gearboxTempC);
@@ -547,7 +554,8 @@ static void drawDisplay() {
   else if(loadProtection.derating())snprintf(line,sizeof(line),"LOAD LIMIT %.1fV",currentDerateV);
   else {
     const auto recent=energy.recent(millis());
-    const float remain=energy.minutesRemaining(millis(),settings.batteryCapacityAh);
+    const float remain=energy.minutesRemaining(millis(),settings.batteryCapacityAh,
+      batteryGauge.percent(settings.batteryEmptyV,settings.batteryFullV));
     if(isfinite(recent.amps) && recent.observedSeconds>=30) {
       if(isfinite(remain))snprintf(line,sizeof(line),"5m %.1fA ~%.0fmin",recent.amps,remain);
       else snprintf(line,sizeof(line),"5m %.1fA ETA:--",recent.amps);
@@ -567,6 +575,7 @@ void setup() {
   loadSettings();
   Wire.begin(config::I2C_SDA_PIN,config::I2C_SCL_PIN);Wire.setClock(100000);
   inaAvailable=writeInaRegister(0x00,0x4127)&&pollIna();
+  batteryGauge.update(millis(),inaAvailable,busVolts);
   voltageGuard.step(millis(),inaAvailable,busVolts,settings.chargerCutoffV);
   chargerPresent=voltageGuard.inhibited();
   Wire.beginTransmission(config::OLED_ADDRESS);
@@ -585,6 +594,7 @@ void loop() {
   if(static_cast<uint32_t>(now-lastIna)>=config::INA_PERIOD_MS) {
     lastIna=now;
     inaAvailable=pollIna();
+    batteryGauge.update(now,inaAvailable,busVolts);
     voltageGuard.step(now,inaAvailable,busVolts,settings.chargerCutoffV);
     chargerPresent=voltageGuard.inhibited();
     if(chargerPresent || otaBusy)disableDrive();

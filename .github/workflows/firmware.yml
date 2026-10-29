@@ -15,6 +15,8 @@ jobs:
         run: g++ -std=c++17 -Wall -Wextra -Werror -Iinclude tests/energy_test.cpp -o /tmp/energy_test && /tmp/energy_test
       - name: Adversarial control and protection property tests (UBSan)
         run: g++ -std=c++17 -Wall -Wextra -Werror -fsanitize=undefined -fno-sanitize-recover=all -Iinclude tests/adversarial_test.cpp -o /tmp/adversarial_test && /tmp/adversarial_test
+      - name: Test battery voltage settings and v5 migration
+        run: g++ -std=c++17 -Wall -Wextra -Werror -Iinclude tests/settings_test.cpp -o /tmp/settings_test && /tmp/settings_test
       - name: Test voltage-based charging inhibit
         run: g++ -std=c++17 -Wall -Wextra -Werror -Iinclude tests/voltage_guard_test.cpp -o /tmp/voltage_guard_test && /tmp/voltage_guard_test
       - name: Check repository, embedded dashboard and license
