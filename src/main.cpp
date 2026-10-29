@@ -338,7 +338,7 @@ static void handleSettingsPost() {
   if(output.enabled || remoteHeld || digitalRead(config::THROTTLE_PIN)==LOW) {
     web.send(409,"text/plain","Release throttle and stop motor before changing settings");return;
   }
-  float ramp,forward,reverse,motorCut,gearCut,emergencyA,derateA,derateSecs,derateMinimumV,stallA,stallSecs,noLoadA,noLoadSecs,capacityAh,chargerCutoffV;
+  float ramp,forward,reverse,motorCut,gearCut,emergencyA,derateA,derateSecs,derateMinimumV,stallA,stallSecs,noLoadA,noLoadSecs,capacityAh,batteryFullV,batteryEmptyV,chargerCutoffV;
   if(!numberArg("ramp_s",0.1f,30,ramp)||!numberArg("forward_v",0.5f,12,forward)||
      !numberArg("reverse_v",0.5f,12,reverse)||!numberArg("motor_cutoff_c",20,120,motorCut)||
      !numberArg("gearbox_cutoff_c",20,120,gearCut)||
