@@ -45,17 +45,17 @@ def note(x,y,msg): txt(x,y,msg,18,'muted')
 add(s.rect(insert=(0,0),size=(W,121),fill='#19293b'))
 txt(52,61,'ATV • PIN-TO-PIN WIRING',39,'#ffffff',True)
 txt(53,93,'HW-039 / IBT-2  •  SN74HC244  •  ESP8266 D1 mini',20,'#c9e1ef')
-txt(1890,61,'Rev G',25,'#a6e1ca',True,anchor='end')
+txt(1890,61,'Rev H',25,'#a6e1ca',True,anchor='end')
 
 # Section framing
 rect(34,151,1871,793,fill='#edf2f6',stroke='#d2dce3',rad=22,sw=2)
 txt(57,192,'1. CONTROL & SIGNALS',25,'text',True)
 
 # Signal wires are drawn first, behind component bodies.
-# LEFT: Buck 5 V, throttle active-low, charger detect, direction A0 ladder
+# LEFT: Buck 5 V, throttle active-low, unused D7, direction A0 ladder
 path([(422,318),(551,318)],'v5')
 path([(422,422),(551,422)],'signal')
-path([(422,525),(551,525)],'signal')
+# D7 no longer wired: 2-terminal charger port has no sense contact
 path([(422,635),(551,635)],'signal')
 # RIGHT: 3.3V and common ground + driver controls
 for y,c in [(340,'v33'),(384,'gnd'),(433,'pwm'),(481,'pwm'),(529,'en')]:
@@ -71,8 +71,8 @@ chip(68,269,354,98,'LM2596 buck','OUT+ = regulated 5.0 V',accent='v5')
 label_pin(422,318,'',color='v5')
 chip(68,375,354,93,'Throttle switch','NO contact to GND • D0 LOW = pressed',accent='signal')
 label_pin(422,422,'',color='signal')
-chip(68,475,354,93,'Charger jack sense','NC contact → GND when unplugged',accent='signal')
-label_pin(422,525,'',color='signal')
+chip(68,475,354,93,'Two-wire charger jack','No data wire to D7; voltage guard',accent='signal')
+# no connector from charger to D7
 chip(68,582,354,198,'F/O/R DPDT: pole 2','COM → GND  •  independent contacts',accent='signal')
 label_pin(422,635,'',color='signal')
 note(89,695,'F → 1kΩ → A0   /   R → 10kΩ → A0')
@@ -81,7 +81,7 @@ note(89,760,'SWITCH OFF → A0 in neither valid range')
 
 # D1 mini stylized actual board
 chip(551,215,385,689,'D1 mini ESP8266','USB programming and Wi-Fi',accent='gnd')
-for yy,ln,col in [(318,'5V','v5'),(422,'D0  throttle','signal'),(525,'D7  charger','signal'),(635,'A0  F/O/R','signal')]:
+for yy,ln,col in [(318,'5V','v5'),(422,'D0  throttle','signal'),(525,'D7  spare (no wire)','signal'),(635,'A0  F/O/R','signal')]:
     label_pin(551,yy,ln,'left',col)
 for yy,ln,col in [(340,'3V3','v33'),(384,'GND','gnd'),(433,'D5 / RPWM','pwm'),(481,'D6 / LPWM','pwm'),(529,'D8 / EN','en'),
                   (749,'D4 / 1-Wire','onewire'),(803,'D1 / SCL','i2c'),(855,'D2 / SDA','i2c')]:
@@ -151,7 +151,7 @@ txt(1597,1148,'M−',18,'text',True)
 rect(405,1267,488,90,fill='#fff',stroke='#d4dade',rad=12)
 txt(425,1293,'AGM smart charger jack',20,'text',True)
 txt(425,1319,'Center + (fused) • Sleeve −',17,'muted')
-txt(425,1344,'D7: verify switched NC sleeve contact',16,'muted')
+txt(425,1344,'No D7 contact; software voltage cutoff',16,'muted')
 rect(979,1214,425,72,fill='#fff5e4',stroke='#e9c688',rad=10)
 txt(995,1240,'Switched 12V → fused buck VIN+',17,'#74521c',True)
 txt(995,1267,'Buck OUT+ 5V → D1 mini 5V',17,'#74521c')

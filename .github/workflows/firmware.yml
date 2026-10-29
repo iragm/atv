@@ -15,6 +15,8 @@ jobs:
         run: g++ -std=c++17 -Wall -Wextra -Werror -Iinclude tests/energy_test.cpp -o /tmp/energy_test && /tmp/energy_test
       - name: Adversarial control and protection property tests (UBSan)
         run: g++ -std=c++17 -Wall -Wextra -Werror -fsanitize=undefined -fno-sanitize-recover=all -Iinclude tests/adversarial_test.cpp -o /tmp/adversarial_test && /tmp/adversarial_test
+      - name: Test voltage-based charging inhibit
+        run: g++ -std=c++17 -Wall -Wextra -Werror -Iinclude tests/voltage_guard_test.cpp -o /tmp/voltage_guard_test && /tmp/voltage_guard_test
       - name: Check repository, embedded dashboard and license
         run: python3 tests/repo_smoke.py
   firmware:
@@ -36,3 +38,22 @@ jobs:
           path: quad-controller-d1-mini.bin
           if-no-files-found: error
           retention-days: 30
+
+  release:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    needs: [unit-tests, firmware]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: atv-firmware-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: quad-controller-d1-mini
+      - name: Update fixed firmware release asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/publish-firmware.sh

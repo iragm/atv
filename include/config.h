@@ -7,7 +7,6 @@ constexpr uint8_t I2C_SCL_PIN = D1;
 constexpr uint8_t ONEWIRE_PIN = D4;
 constexpr uint8_t RPWM_PIN = D5;
 constexpr uint8_t LPWM_PIN = D6;
-constexpr uint8_t CHARGER_PIN = D7;
 constexpr uint8_t ENABLE_PIN = D8;
 constexpr uint8_t DIRECTION_ADC_PIN = A0;
 constexpr uint16_t PWM_RANGE = 1023;
@@ -27,6 +26,4 @@ constexpr uint32_t TEMPERATURE_PERIOD_MS = 1000;
 constexpr uint32_t LOG_PERIOD_MS = 1000;
 constexpr uint32_t PRESS_DEBOUNCE_MS = 30;
 constexpr uint32_t WIFI_DRIVE_TTL_MS = 600;
-// Choose a unique WPA2 passphrase before putting the ATV in service.
-constexpr char AP_PASSWORD[] = "quadsetup26";
 }
