@@ -5,7 +5,7 @@
 
 namespace quad {
 constexpr uint32_t SETTINGS_MAGIC = 0x51554144UL;
-constexpr uint16_t SETTINGS_VERSION = 6;
+constexpr uint16_t SETTINGS_VERSION = 7;
 struct Settings {
   uint32_t magic = SETTINGS_MAGIC;
   uint16_t version = SETTINGS_VERSION;
@@ -28,6 +28,7 @@ struct Settings {
   float batteryFullV = 13.2f;     // approximate resting full AGM voltage
   float batteryEmptyV = 11.8f;    // approximate resting empty AGM voltage
   float chargerCutoffV = 13.9f;
+  uint8_t directionMode = 0; // 0=three-position; 1=latching main power switch
   char apSsid[33] = {}; // empty means QUAD-<chip-id>
   char apPassword[64] = "quadsetup26";
   char otaSsid[33] = {}; // only used during OTA
@@ -57,6 +58,7 @@ inline uint32_t settingsChecksum(const Settings& s) {
   mix(&s.batteryFullV, sizeof(s.batteryFullV));
   mix(&s.batteryEmptyV, sizeof(s.batteryEmptyV));
   mix(&s.chargerCutoffV, sizeof(s.chargerCutoffV));
+  mix(&s.directionMode, sizeof(s.directionMode));
   mix(s.apSsid, sizeof(s.apSsid)); mix(s.apPassword, sizeof(s.apPassword));
   mix(s.otaSsid, sizeof(s.otaSsid)); mix(s.otaPassword, sizeof(s.otaPassword));
   return hash;
@@ -94,6 +96,7 @@ inline bool validSettings(const Settings& s) {
       !(s.stallTripA > 0 && s.emergencyTripA > 0 && s.stallTripA >= s.emergencyTripA) &&
       !(s.derateTripA > 0 && s.stallTripA > 0 && s.derateTripA >= s.stallTripA) &&
       isfinite(s.chargerCutoffV) && s.chargerCutoffV >= 12.5f && s.chargerCutoffV <= 15.5f &&
+      s.directionMode <= 1 &&
       validCredential(s.apSsid,sizeof(s.apSsid),1,32,true) &&
       validCredential(s.apPassword,sizeof(s.apPassword),8,63,false) &&
       validCredential(s.otaSsid,sizeof(s.otaSsid),1,32,true) &&
@@ -288,3 +291,82 @@ inline bool upgradeSettings(const LegacySettingsV5& old, Settings& out) {
   return validSettings(out);
 }
 }
+
+namespace quad {
+// Exact v6 EEPROM layout, including all saved Wi-Fi credentials and thresholds.
+struct LegacySettingsV6 {
+  uint32_t magic = SETTINGS_MAGIC;
+  uint16_t version = 6;
+  uint16_t rampMs = 2000;
+  float forwardV = 6.0f;
+  float reverseV = 4.0f;
+  float motorCutoffC = 75.0f;
+  float gearboxCutoffC = 70.0f;
+  uint8_t motorRom[8] = {};
+  uint8_t gearboxRom[8] = {};
+  float emergencyTripA = 0.0f;  // first sampled current above threshold -> latch
+  float derateTripA = 0.0f;     // sustained-overload PWM reduction
+  uint16_t derateTripMs = 700;
+  float derateMinimumV = 2.0f;
+  float stallTripA = 0.0f;         // disabled until measured/calibrated
+  uint16_t stallTripMs = 700;
+  float noLoadBelowA = 0.0f;       // optional heuristic, disabled by default
+  uint16_t noLoadTripMs = 1500;
+  float batteryCapacityAh = 7.0f;  // nominal capacity used for runtime only
+  float batteryFullV = 13.2f;     // approximate resting full AGM voltage
+  float batteryEmptyV = 11.8f;    // approximate resting empty AGM voltage
+  float chargerCutoffV = 13.9f;
+  char apSsid[33] = {}; // empty means QUAD-<chip-id>
+  char apPassword[64] = "quadsetup26";
+  char otaSsid[33] = {}; // only used during OTA
+  char otaPassword[64] = {};
+  uint32_t checksum = 0;
+};
+inline uint32_t legacyV6Checksum(const LegacySettingsV6& s) {
+  // FNV1a over named fields, so padding is irrelevant.
+  uint32_t hash = 2166136261UL;
+  const auto mix = [&hash](const void* ptr, unsigned len) {
+    const uint8_t* b = static_cast<const uint8_t*>(ptr);
+    for (unsigned i = 0; i < len; ++i) { hash ^= b[i]; hash *= 16777619UL; }
+  };
+  mix(&s.magic, sizeof(s.magic)); mix(&s.version, sizeof(s.version));
+  mix(&s.rampMs, sizeof(s.rampMs));
+  mix(&s.forwardV, sizeof(s.forwardV)); mix(&s.reverseV, sizeof(s.reverseV));
+  mix(&s.motorCutoffC, sizeof(s.motorCutoffC));
+  mix(&s.gearboxCutoffC, sizeof(s.gearboxCutoffC));
+  mix(s.motorRom, sizeof(s.motorRom)); mix(s.gearboxRom, sizeof(s.gearboxRom));
+  mix(&s.emergencyTripA, sizeof(s.emergencyTripA));
+  mix(&s.derateTripA, sizeof(s.derateTripA));
+  mix(&s.derateTripMs, sizeof(s.derateTripMs));
+  mix(&s.derateMinimumV, sizeof(s.derateMinimumV));
+  mix(&s.stallTripA, sizeof(s.stallTripA)); mix(&s.stallTripMs, sizeof(s.stallTripMs));
+  mix(&s.noLoadBelowA, sizeof(s.noLoadBelowA)); mix(&s.noLoadTripMs, sizeof(s.noLoadTripMs));
+  mix(&s.batteryCapacityAh, sizeof(s.batteryCapacityAh));
+  mix(&s.batteryFullV, sizeof(s.batteryFullV));
+  mix(&s.batteryEmptyV, sizeof(s.batteryEmptyV));
+  mix(&s.chargerCutoffV, sizeof(s.chargerCutoffV));
+  mix(s.apSsid, sizeof(s.apSsid)); mix(s.apPassword, sizeof(s.apPassword));
+  mix(s.otaSsid, sizeof(s.otaSsid)); mix(s.otaPassword, sizeof(s.otaPassword));
+  return hash;
+}
+
+inline bool upgradeSettings(const LegacySettingsV6& old, Settings& out) {
+  if(old.magic!=SETTINGS_MAGIC || old.version!=6 || old.checksum!=legacyV6Checksum(old))return false;
+  out=Settings{};
+  out.rampMs=old.rampMs;out.forwardV=old.forwardV;out.reverseV=old.reverseV;
+  out.motorCutoffC=old.motorCutoffC;out.gearboxCutoffC=old.gearboxCutoffC;
+  memcpy(out.motorRom,old.motorRom,8);memcpy(out.gearboxRom,old.gearboxRom,8);
+  out.emergencyTripA=old.emergencyTripA;out.derateTripA=old.derateTripA;
+  out.derateTripMs=old.derateTripMs;out.derateMinimumV=old.derateMinimumV;
+  out.stallTripA=old.stallTripA;out.stallTripMs=old.stallTripMs;
+  out.noLoadBelowA=old.noLoadBelowA;out.noLoadTripMs=old.noLoadTripMs;
+  out.batteryCapacityAh=old.batteryCapacityAh;
+  out.batteryFullV=old.batteryFullV;out.batteryEmptyV=old.batteryEmptyV;
+  out.chargerCutoffV=old.chargerCutoffV;
+  memcpy(out.apSsid,old.apSsid,sizeof(old.apSsid));memcpy(out.apPassword,old.apPassword,sizeof(old.apPassword));
+  memcpy(out.otaSsid,old.otaSsid,sizeof(old.otaSsid));memcpy(out.otaPassword,old.otaPassword,sizeof(old.otaPassword));
+  out.directionMode=0;
+  out.checksum=settingsChecksum(out);
+  return validSettings(out);
+}
+} // namespace quad

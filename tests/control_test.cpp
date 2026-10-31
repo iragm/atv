@@ -101,5 +101,14 @@ int main() {
   assert(decodeDirection(85,45,145,275,410)==Direction::Forward);
   assert(decodeDirection(340,45,145,275,410)==Direction::Reverse);
   assert(decodeDirection(500,45,145,275,410)==Direction::Invalid);
+  assert(directionFromMode(0,500,45,145,275,410)==Direction::Invalid);
+  for(unsigned adcValue : {0U,500U,1023U})
+    assert(directionFromMode(1,adcValue,45,145,275,410)==Direction::Forward);
+  Controller simple;
+  Input simpleInput=forward();
+  assert(simple.step(0,simpleInput).state==State::Ready);
+  simpleInput.physicalPressed=true;
+  assert(simple.step(10,simpleInput).fault==Fault::None);
+  assert(simple.step(2010,simpleInput).enabled);
   std::cout << "controller and settings tests passed\n";
 }

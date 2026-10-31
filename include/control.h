@@ -162,4 +162,10 @@ inline Direction decodeDirection(uint16_t adc, uint16_t fMin, uint16_t fMax,
   if (adc >= rMin && adc <= rMax) return Direction::Reverse;
   return Direction::Invalid;
 }
+// A latching main power switch physically disconnects motor/controller power when OFF.
+// While powered in this mode, A0 is unused and the default direction is forward.
+inline Direction directionFromMode(uint8_t mode, uint16_t adc,
+                                   uint16_t fMin, uint16_t fMax, uint16_t rMin, uint16_t rMax) {
+  return mode==1 ? Direction::Forward : decodeDirection(adc,fMin,fMax,rMin,rMax);
+}
 } // namespace quad
