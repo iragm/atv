@@ -36,3 +36,16 @@ for sense in ('IN+', 'IN−', 'VBUS', 'K+', 'K−', 'R_EN', 'L_EN', '3V3', '5V',
 assert 'Onboard PWM / EN pull-downs' in svg
 assert 'Three passive 10k control pulldowns' not in (ROOT / 'scripts/draw_wiring_overview.py').read_text()
 assert '10kΩ × **4**' in README
+
+# Three-tab dashboard; Main is the only initially visible panel.
+for tab in ('main', 'test', 'settings'):
+    assert f'id="tab-{tab}"' in UI
+    assert f'id="panel-{tab}"' in UI
+assert 'id="panel-main" role="tabpanel" aria-labelledby="tab-main">' in UI
+assert 'id="panel-test" role="tabpanel" aria-labelledby="tab-test" hidden>' in UI
+assert 'id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>' in UI
+assert "function openTab(name){stop();" in UI
+assert "if(held||$('panel-test').hidden)return" in UI
+assert 'Settings are stored in ESP8266 flash.' not in UI
+assert 'Connect to the QUAD Wi-Fi network.' not in UI
+assert 'Voltage-based charge % is an estimate' not in UI
