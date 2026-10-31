@@ -478,8 +478,9 @@ static void runOtaFromUrl() {
   WiFi.begin(settings.otaSsid,settings.otaPassword);
   const uint32_t started=millis();
   while(WiFi.status()!=WL_CONNECTED && static_cast<uint32_t>(millis()-started)<15000) delay(50);
-  if(WiFi.status()!=WL_CONNECTED) otaResult="OTA Wi-Fi connection failed";
+  if(WiFi.status()!=WL_CONNECTED) otaResult="OTA Wi-Fi connection failed (status "+String(static_cast<int>(WiFi.status()))+")";
   else {
+    Serial.printf("OTA station online: IP=%s RSSI=%ddBm freeHeap=%u\n", WiFi.localIP().toString().c_str(), WiFi.RSSI(), ESP.getFreeHeap());
     configTime(0,0,"pool.ntp.org","time.google.com");
     const uint32_t clockStart=millis();
     while(time(nullptr)<1700000000 && static_cast<uint32_t>(millis()-clockStart)<12000) delay(100);
@@ -488,12 +489,20 @@ static void runOtaFromUrl() {
       BearSSL::X509List trustRoots(OTA_TRUST_ROOTS);
       BearSSL::WiFiClientSecure client;
       client.setTrustAnchors(&trustRoots);
-      client.setBufferSizes(1024,1024);
+      // GitHub redirect targets may send full 16KB TLS records. Small RX
+      // buffers only work if every server supports MFLN (not checked here).
+      client.setBufferSizes(16384,512);
       ESPhttpUpdate.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
       ESPhttpUpdate.setClientTimeout(15000);
       ESPhttpUpdate.rebootOnUpdate(true);
+      otaResult="Downloading firmware over HTTPS";
       const t_httpUpdate_return result=ESPhttpUpdate.update(client,OTA_URL);
-      if(result==HTTP_UPDATE_FAILED) otaResult="OTA failed: "+ESPhttpUpdate.getLastErrorString();
+      if(result==HTTP_UPDATE_FAILED) {
+        otaResult="GitHub OTA failed ("+String(ESPhttpUpdate.getLastError())+"): "+ESPhttpUpdate.getLastErrorString();
+        char tlsError[100] = {};
+        const int tlsCode=client.getLastSSLError(tlsError,sizeof(tlsError));
+        if(tlsCode) otaResult += " / TLS "+String(tlsCode)+": "+String(tlsError);
+      }
       else if(result==HTTP_UPDATE_NO_UPDATES) otaResult="Already current";
       // HTTP_UPDATE_OK normally reboots automatically.
     }
@@ -501,6 +510,7 @@ static void runOtaFromUrl() {
   Serial.println(otaResult);
   WiFi.disconnect(false);WiFi.mode(WIFI_AP);
   otaBusy=false;
+  Serial.printf("OTA result: %s\n", otaResult.c_str());
 }
 static void startPortal() {
   WiFi.persistent(false);WiFi.mode(WIFI_AP);

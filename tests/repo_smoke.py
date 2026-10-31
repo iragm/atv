@@ -49,3 +49,11 @@ assert "if(held||$('panel-test').hidden)return" in UI
 assert 'Settings are stored in ESP8266 flash.' not in UI
 assert 'Connect to the QUAD Wi-Fi network.' not in UI
 assert 'Voltage-based charge % is an estimate' not in UI
+
+# GitHub OTA must use TLS buffers safe without MFLN and UI must not link off the offline AP.
+assert "client.setBufferSizes(16384,512)" in MAIN
+assert "client.setBufferSizes(1024,1024)" not in MAIN
+assert "getLastSSLError" in MAIN
+assert 'id="firmware-link"' not in UI
+assert "Upload .bin from phone" in UI
+assert "Update from GitHub (home Wi-Fi)" in UI

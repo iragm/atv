@@ -80,7 +80,7 @@ I²C modules often have their own pullups. If neither does, add 4.7kΩ from each
 3. Join `QUAD-XXXXXX`, password `quadsetup26`; open [192.168.4.1](http://192.168.4.1). Configure ramp, limits, sensors, Wi-Fi and battery voltages.
 4. Test the switch, INA226 shunt polarity/current, driver logic and motor on a current-limited bench supply.
 
-[Latest firmware (.bin)](https://github.com/iragm/atv/releases/download/firmware-latest/quad-controller-d1-mini.bin) · OTA from web UI with 2.4GHz internet credentials, or upload a `.bin` locally.
+[Latest firmware (.bin)](https://github.com/iragm/atv/releases/download/firmware-latest/quad-controller-d1-mini.bin). **Upload from phone:** download `.bin` while online, then join ATV Wi-Fi and upload in Settings. **GitHub OTA:** configure 2.4GHz home Wi-Fi in Settings, save, and choose Update from GitHub. ATV Wi-Fi may disconnect temporarily; reconnect to see OTA status.
 
 **Defaults:** 2s ramp, 6V forward / 4V reverse equivalent, 2s pedal release hold, 75°C motor / 70°C gearbox derating, 13.2V full / 11.8V empty battery gauge, charger-voltage lockout **above 13.9V**. Current cutoffs are off until calibrated. Missing OLED or sensors don't stop the controller, but their measurements/protections are unavailable. The 2-wire charging jack cannot detect an unpowered/low-voltage plugged-in charger.
 
