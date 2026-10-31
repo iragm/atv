@@ -69,6 +69,10 @@ Motor-branch current is measured; charger current and accessories are not. When 
 
 I²C modules often have their own pullups. If neither does, add 4.7kΩ from each of SDA and SCL to 3V3. Don't tie I²C to 5V.
 
+## Dashboard
+
+**Main:** live readings and faults. **Test:** Wi-Fi hold-to-drive. **Settings:** controller limits, Wi-Fi and firmware update. Temperature probes remain optional; motor current does not reliably reveal overheating.
+
 ## Flash and use
 
 1. Set the buck to **5.00V** before connecting the D1 mini. Confirm polarity and the HW-039 VCC pin with power **off**.
