@@ -22,7 +22,7 @@ ESP8266 D1 mini controls one motor through an **HW-039 / IBT-2**. Phone dashboar
 | **D4** | Both DS18B20 DATA wires; **4.7kΩ pullup to 3V3** |
 | **D5 / D6** | HW-039 **RPWM / LPWM** (onboard pulldowns; no external resistors) |
 | **D8** | HW-039 **R_EN and L_EN tied together** (onboard pulldowns) |
-| **A0** | Direction switch resistor ladder (below) |
+| **A0** | 3-position switch ladder; **unused** in on/off power-switch mode |
 | D7 | Spare; no charger-jack switch contact |
 | D3, RX, TX | Leave unused (boot and USB serial) |
 
@@ -37,7 +37,7 @@ ESP8266 D1 mini controls one motor through an **HW-039 / IBT-2**. Phone dashboar
 
 **Direction switch, pole 2 (isolated from the 12V pole):** COM → GND; F → **1kΩ** → A0; R → **10kΩ** → A0; A0 → **10kΩ** → 3V3 and separately → **10kΩ** → GND. Firmware accepts F/O/R as distinct ADC ranges. Check actual readings before running the motor.
 
-Why not two GPIOs? The D1 mini has only one comfortably free GPIO (D7). D3/GPIO0 and D8/GPIO15 are boot-strapping pins; RX/TX are used by USB serial. **A0 preserves an unambiguous OFF reading without compromising startup.** Move to a board with more GPIOs if a future analog sensor needs A0.
+**On/off power-switch ATV:** In Settings, select **Direction input → On/off power switch (forward only)**. A0 can be left disconnected. Use a *latching, DC-rated* main switch in the fused motor/controller supply path so OFF removes drive power. The D0 throttle still controls motion. This mode is **not** suitable for a momentary button connected only to A0.\n\nWhy not two GPIOs? The D1 mini has only one comfortably free GPIO (D7). D3/GPIO0 and D8/GPIO15 are boot-strapping pins; RX/TX are used by USB serial. **A0 preserves an unambiguous OFF reading without compromising startup.** Move to a board with more GPIOs if a future analog sensor needs A0.
 
 ### INA226 and the external shunt
 
@@ -71,7 +71,7 @@ I²C modules often have their own pullups. If neither does, add 4.7kΩ from each
 
 ## Dashboard
 
-**Main:** live readings and faults. **Test:** Wi-Fi hold-to-drive. **Settings:** controller limits, Wi-Fi and firmware update. Temperature probes remain optional; motor current does not reliably reveal overheating.
+**Main:** live readings and faults. **Test:** Wi-Fi hold-to-drive. **Settings:** direction input, limits, Wi-Fi and firmware update. **OLED:** yellow top = watts and power gauge; blue middle = battery %, icon and voltage; bottom = fault or PWM bar. Temperature probes remain optional; motor current does not reliably reveal overheating.
 
 ## Flash and use
 

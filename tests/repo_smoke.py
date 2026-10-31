@@ -57,3 +57,15 @@ assert "getLastSSLError" in MAIN
 assert 'id="firmware-link"' not in UI
 assert "Upload .bin from phone" in UI
 assert "Update from GitHub (home Wi-Fi)" in UI
+
+# Settings mode and split OLED gauge layout.
+assert 'id="direction-mode"' in UI
+assert "direction_mode:$('direction-mode').value" in UI
+assert 'directionFromMode(settings.directionMode' in MAIN
+assert 'Migrated settings to v7' in MAIN
+oled=MAIN.split('static void drawDisplay() {',1)[1].split('void setup() {',1)[0]
+assert 'display.drawFrame(24,2,57,12)' in oled
+assert 'display.drawFrame(2,25,76,16)' in oled
+assert 'display.drawBox(55,53,fill,9)' in oled
+assert 'INA missing' not in oled
+assert 'Temp probe(s) missing' not in oled
