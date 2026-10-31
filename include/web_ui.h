@@ -9,8 +9,8 @@ static const char WEB_UI[] PROGMEM = R"WEBPAGE(<!doctype html>
 </style></head><body><header><h1>QUAD <span style="color:var(--accent)">CONTROL</span></h1></header><main>
 <nav class="tabs" role="tablist" aria-label="Controller tabs">
 <button type="button" role="tab" id="tab-main" aria-controls="panel-main" aria-selected="true" tabindex="0">Main</button>
-<button type="button" role="tab" id="tab-test" aria-controls="panel-test" aria-selected="false" tabindex="-1">Test</button>
-<button type="button" role="tab" id="tab-settings" aria-controls="panel-settings" aria-selected="false" tabindex="-1">Settings</button>
+<button type="button" role="tab" id="tab-test" aria-controls="panel-test" aria-selected="false">Test</button>
+<button type="button" role="tab" id="tab-settings" aria-controls="panel-settings" aria-selected="false">Settings</button>
 </nav>
 <section id="panel-main" role="tabpanel" aria-labelledby="tab-main"><div id="alerts" class="notice" hidden></div><div class="tiles">
 <div class="tile"><small>State</small><b id="state">Connecting</b></div>
@@ -72,7 +72,7 @@ static const char WEB_UI[] PROGMEM = R"WEBPAGE(<!doctype html>
 <script>
 'use strict';const $=id=>document.getElementById(id);let driveDir='fwd',held=false,timer=null,loaded=false,lastStatus=0;
 const tabs=['main','test','settings'];
-function openTab(name){stop();for(const id of tabs){const active=id===name;const button=$('tab-'+id);$('panel-'+id).hidden=!active;button.setAttribute('aria-selected',String(active));button.tabIndex=active?0:-1;}}
+function openTab(name){stop();for(const id of tabs){const active=id===name;const button=$('tab-'+id);$('panel-'+id).hidden=!active;button.setAttribute('aria-selected',String(active));}}
 for(const id of tabs)$('tab-'+id).addEventListener('click',()=>openTab(id));
 const api=async(path,init)=>{const r=await fetch(path,{cache:'no-store',...init});if(!r.ok)throw Error(await r.text());return r.json()};
 function drive(on){fetch('/api/drive',{method:'POST',headers:{'X-Quad-Control':'1','Content-Type':'application/x-www-form-urlencoded'},body:'hold='+(on?'1':'0')+'&direction='+driveDir,keepalive:!on}).catch(()=>{});}
