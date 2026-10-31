@@ -45,11 +45,11 @@ Why not two GPIOs? The D1 mini has only one comfortably free GPIO (D7). D3/GPIO0
 |---|---|
 | **IN+** | Shunt **K+** Kelvin sense screw, on the switched supply side |
 | **IN−** | Shunt **K−** Kelvin sense screw, on the HW-039 side |
-| **VBUS** | HW-039 side of shunt **if breakout exposes VBUS and does not already tie it internally** |
+| **VBUS** | Separate thin wire to the **HW-039 B+ side** of shunt (confirmed not linked internally on this breakout) |
 | **VCC / GND** | D1 mini **3V3 / common GND** |
 | **SCL / SDA** | D1 / D2 |
 
-**No voltage divider is needed for the INA226.** It measures a 0–36V bus directly. The **50A/75mV shunt is 1.5mΩ**, as configured in firmware. The motor current passes through the *large shunt terminals*, **never through the INA226 board**. Only the two small Kelvin wires go to IN+/IN−. If your breakout has an onboard shunt (e.g. `R100`), it must not remain electrically in parallel with the external shunt. Verify its actual VBUS routing and I²C pullups to **3.3V** before applying power.
+**Four shunt screws:** One metal block at each end. Attach the fused switched +12V motor lead to the **large current terminal** at one end and HW-039 B+ to the large current terminal at the other. Use one **separate small sense screw** on each block for IN+ (supply end) and IN− (driver end). VBUS gets its own thin wire to the driver end. If the screws differ from this arrangement, identify the heavy-current connections from the actual shunt before wiring. Mount the shunt insulated from the chassis. Protect thin 12V sense wires against shorts; small inline fuses near the shunt are recommended.\n\n**Your INA226:** The onboard `R100` (0.1Ω) resistor has been removed. With all power disconnected, verify **IN+ ↔ IN− is open**, with no remaining solder bridge, and **VBUS is not connected** to either input. Then wire the external **50A/75mV = 1.5mΩ** shunt (matching firmware). **No voltage divider:** INA226 can measure a 0–36V bus directly. Never carry motor current through the breakout. Check I²C pullups use **3.3V** before power-up.
 
 Motor-branch current is measured; charger current and accessories are not. When switched OFF, the INA226 and display are unpowered.
 

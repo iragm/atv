@@ -183,7 +183,7 @@ block(1380,298,240,222,'50A / 75mV','1.5mΩ • 4-terminal shunt','sense')
 pin(1380,405,'LOAD IN','sw');pin(1620,405,'LOAD OUT','plus','right')
 pin(1455,500,'K+','sense');pin(1555,500,'K−','sense','right')
 L('Large wires: motor current',1397,455,15,'muted')
-L('Small wires: Kelvin sense',1397,479,15,'muted')
+L('Small screws: Kelvin sense',1397,479,15,'muted')
 block(1800,270,470,620,'HW-039 / IBT-2','SN74HC244 onboard buffer • 3V3 VCC','en')
 for y,name,color in [(405,'B+  fused switched motor +','plus'),(490,'B−  battery GND','gnd'),(590,'RPWM  D5','pwm'),(635,'LPWM  D6','pwm'),(675,'R_EN  D8','en'),(715,'L_EN  D8','en'),(710,'VCC  3V3','v3'),(755,'GND  common','gnd')]:
  # VCC at y710 would clash L_EN at715; move VCC to 770, GND 815 below
@@ -226,9 +226,9 @@ block(520,1470,340,170,'THROTTLE BUTTON','Normally open • active LOW','throttl
 pin(860,1540,'D0','throttle','right');pin(580,1610,'GND','gnd')
 L('10k pull-up to 3V3',548,1595,17,'muted')
 block(1970,1070,455,450,'INA226 CURRENT','External shunt monitor','sense')
-for y,name,color in [(1140,'IN+ ← K+ before shunt','sense'),(1180,'IN− ← K− after shunt','sense'),(1220,'VBUS ← after shunt*','sense'),(1300,'SDA ← D2','i2c'),(1340,'SCL ← D1','i2c'),(1410,'VCC ← 3V3','v3'),(1450,'GND','gnd')]:
+for y,name,color in [(1140,'IN+ ← K+ before shunt','sense'),(1180,'IN− ← K− after shunt','sense'),(1220,'VBUS ← after shunt','sense'),(1300,'SDA ← D2','i2c'),(1340,'SCL ← D1','i2c'),(1410,'VCC ← 3V3','v3'),(1450,'GND','gnd')]:
  pin(1970 if y<=1340 else 2425,y,name,color, 'left' if y<=1340 else 'right')
-L('* Check breakout VBUS trace',1990,1490,16,'muted')
+L('R100 REMOVED • VBUS wired',1990,1490,16,'muted')
 L('No divider: INA226 VBUS ≤36V',1990,1512,16,'muted')
 block(2540,990,360,270,'OLED I²C','SSD1306 128×64 optional','i2c')
 for y,name,col in [(1080,'SDA ← D2','i2c'),(1120,'SCL ← D1','i2c'),(1190,'VCC ← 3V3','v3'),(1230,'GND','gnd')]:pin(2540,y,name,col)
