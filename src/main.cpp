@@ -202,32 +202,29 @@ static void loadSettings() {
   EEPROM.get(0,settings);
   if(!quad::validSettings(settings)) {
     quad::Settings upgraded;
-    quad::LegacySettingsV5 old5{};
-    quad::LegacySettingsV4 old4{};
-    quad::LegacySettingsV3 old3{};
-    quad::LegacySettingsV2 old2{};
-    EEPROM.get(0,old5);
-    if(quad::upgradeSettings(old5,upgraded)) {
-      settings=upgraded;Serial.println(F("Migrated v5 settings to v6"));
-    } else {
-    EEPROM.get(0,old4);
-    if (quad::upgradeSettings(old4,upgraded)) {
-      settings=upgraded;Serial.println(F("Migrated v4 settings to v6"));
-    } else {
-    EEPROM.get(0,old3);
-    if(quad::upgradeSettings(old3,upgraded)) {
-      settings=upgraded;Serial.println(F("Migrated v3 settings to v6"));
-    } else {
-      EEPROM.get(0,old2);
-      if(quad::upgradeSettings(old2,upgraded)) {
-        settings=upgraded;Serial.println(F("Migrated v2 settings to v6"));
-      } else {
-        settings=quad::Settings{};settings.checksum=quad::settingsChecksum(settings);
-        Serial.println(F("Default settings loaded"));
-      }
+    bool migrated=false;
+    quad::LegacySettingsV6 old6{};
+    EEPROM.get(0,old6);
+    if(quad::upgradeSettings(old6,upgraded)) migrated=true;
+    if(!migrated) {
+      quad::LegacySettingsV5 old5{}; EEPROM.get(0,old5);
+      migrated=quad::upgradeSettings(old5,upgraded);
     }
+    if(!migrated) {
+      quad::LegacySettingsV4 old4{}; EEPROM.get(0,old4);
+      migrated=quad::upgradeSettings(old4,upgraded);
     }
+    if(!migrated) {
+      quad::LegacySettingsV3 old3{}; EEPROM.get(0,old3);
+      migrated=quad::upgradeSettings(old3,upgraded);
     }
+    if(!migrated) {
+      quad::LegacySettingsV2 old2{}; EEPROM.get(0,old2);
+      migrated=quad::upgradeSettings(old2,upgraded);
+    }
+    settings=migrated ? upgraded : quad::Settings{};
+    settings.checksum=quad::settingsChecksum(settings);
+    Serial.println(migrated ? F("Migrated settings to v7") : F("Default settings loaded"));
   }
   controller.setLimits(controllerLimits());
 }
@@ -253,7 +250,7 @@ static String apName() {
 }
 static String settingsJson() {
   String s;s.reserve(830);
-  s="{\"ramp_s\":"+String(settings.rampMs/1000.0f,1)+",\"forward_v\":"+jsonFloat(settings.forwardV,1)+
+  s="{\"direction_mode\":"+String(settings.directionMode)+",\"ramp_s\":"+String(settings.rampMs/1000.0f,1)+",\"forward_v\":"+jsonFloat(settings.forwardV,1)+
     ",\"reverse_v\":"+jsonFloat(settings.reverseV,1)+",\"motor_cutoff_c\":"+jsonFloat(settings.motorCutoffC,0)+
     ",\"gearbox_cutoff_c\":"+jsonFloat(settings.gearboxCutoffC,0)+
     ",\"emergency_trip_a\":"+jsonFloat(settings.emergencyTripA,1)+
@@ -355,6 +352,10 @@ static void handleSettingsPost() {
     web.send(400,"text/plain","Invalid config values");return;
   }
   quad::Settings updated=settings;
+  if(!web.hasArg("direction_mode") || (web.arg("direction_mode")!="0" && web.arg("direction_mode")!="1")) {
+    web.send(400,"text/plain","Invalid direction input mode");return;
+  }
+  updated.directionMode=web.arg("direction_mode")=="1" ? 1 : 0;
   const uint16_t rampMs=static_cast<uint16_t>(ramp*1000.0f+0.5f);
   updated.rampMs=rampMs;updated.forwardV=forward;updated.reverseV=reverse;
   updated.motorCutoffC=motorCut;updated.gearboxCutoffC=gearCut;
@@ -540,38 +541,64 @@ static void startPortal() {
   Serial.printf("Wi-Fi AP: %s / http://192.168.4.1/\n",ssid.c_str());
 }
 static void drawDisplay() {
-  if(!oledAvailable)return;
-  char line[32];display.clearBuffer();display.setFont(u8g2_font_6x10_tf);
-  snprintf(line,sizeof(line),"QUAD %s",stateName(output.state));display.drawStr(0,10,line);
-  snprintf(line,sizeof(line),"%s %u%% %s",directionName(output.direction),
-    static_cast<unsigned>(output.duty*100UL/config::PWM_RANGE),sourceName(output.source));display.drawStr(0,22,line);
-  if(inaAvailable)snprintf(line,sizeof(line),"%.2fV %.1fA %.0f%%",busVolts,motorAmps,
-    batteryGauge.percent(settings.batteryEmptyV,settings.batteryFullV));
-  else snprintf(line,sizeof(line),"INA missing (12V est)");
-  display.drawStr(0,34,line);
-  if(motorFound&&gearboxFound)snprintf(line,sizeof(line),"M%.0fC G%.0fC",motorTempC,gearboxTempC);
-  else if(motorFound)snprintf(line,sizeof(line),"M%.0fC G---",motorTempC);
-  else if(gearboxFound)snprintf(line,sizeof(line),"M--- G%.0fC",gearboxTempC);
-  else snprintf(line,sizeof(line),"Temp probe(s) missing");
-  display.drawStr(0,46,line);
-  if(otaBusy)snprintf(line,sizeof(line),"OTA UPDATE STOPPED");
-  else if(voltageGuard.inhibited())snprintf(line,sizeof(line),"HIGH VOLT / CHARGER?");
-  else if(motorHot||gearboxHot)snprintf(line,sizeof(line),"HOT %s 5V LIMIT",motorHot?(gearboxHot?"M+G":"M"):"G");
-  else if(output.fault==quad::Fault::EmergencyCurrent)snprintf(line,sizeof(line),"EMERGENCY CURRENT CUT");
-  else if(output.fault==quad::Fault::Overcurrent)snprintf(line,sizeof(line),"STALL CURRENT CUT");
-  else if(output.fault==quad::Fault::NoLoad)snprintf(line,sizeof(line),"POSSIBLE NO-LOAD CUT");
-  else if(output.fault!=quad::Fault::None)snprintf(line,sizeof(line),"FAULT: %s",faultName(output.fault));
-  else if(loadProtection.derating())snprintf(line,sizeof(line),"LOAD LIMIT %.1fV",currentDerateV);
-  else {
-    const auto recent=energy.recent(millis());
-    const float remain=energy.minutesRemaining(millis(),settings.batteryCapacityAh,
-      batteryGauge.percent(settings.batteryEmptyV,settings.batteryFullV));
-    if(isfinite(recent.amps) && recent.observedSeconds>=30) {
-      if(isfinite(remain))snprintf(line,sizeof(line),"5m %.1fA ~%.0fmin",recent.amps,remain);
-      else snprintf(line,sizeof(line),"5m %.1fA ETA:--",recent.amps);
-    } else snprintf(line,sizeof(line),"ADC:%u WIFI:ON",adc);
+  if (!oledAvailable) return;
+  char line[26];
+  display.clearBuffer();
+  display.setDrawColor(1);
+
+  // Physical OLED rows 0..15 are yellow: motor input power.
+  const float watts=(inaAvailable && isfinite(motorAmps) && isfinite(busVolts))
+      ? fmaxf(0.0f,motorAmps*busVolts) : NAN;
+  const float scaleW=settings.emergencyTripA>0.0f
+      ? settings.emergencyTripA*supplyForPwm() : 240.0f;
+  const float fraction=isfinite(watts) && scaleW>0.0f
+      ? fminf(1.0f,watts/scaleW) : 0.0f;
+  display.setFont(u8g2_font_5x7_tf);
+  display.drawStr(1,10,"PWR");
+  display.drawFrame(24,2,57,12);
+  if(fraction>0.0f) display.drawBox(26,4,static_cast<uint8_t>(fraction*53.0f+0.5f),8);
+  if(isfinite(watts)) snprintf(line,sizeof(line),"%.0fW",watts);
+  else snprintf(line,sizeof(line),"--W");
+  display.drawStr(85,10,line);
+
+  // Blue rows: battery icon, percentage and live bus voltage.
+  const float charge=batteryGauge.percent(settings.batteryEmptyV,settings.batteryFullV);
+  display.drawFrame(2,25,76,16);
+  display.drawBox(78,29,4,8);
+  if(isfinite(charge)) {
+    const float pct=fminf(100.0f,fmaxf(0.0f,charge));
+    if(pct>0.0f) display.drawBox(4,27,static_cast<uint8_t>(pct*72.0f/100.0f+0.5f),12);
+    snprintf(line,sizeof(line),"%u%%",static_cast<unsigned>(pct+0.5f));
+  } else snprintf(line,sizeof(line),"--%%");
+  display.drawStr(90,24,line);
+  display.setFont(u8g2_font_6x10_tf);
+  if(inaAvailable && isfinite(busVolts)) snprintf(line,sizeof(line),"%.1fV",busVolts);
+  else snprintf(line,sizeof(line),"--.-V");
+  display.drawStr(87,38,line);
+
+  // Bottom: actual fault/warning, otherwise speed (PWM level) without outline.
+  const char* problem=nullptr;
+  if(otaBusy) problem="UPDATING";
+  else if(voltageGuard.inhibited()) problem="CHARGER / HIGH VOLT";
+  else if(output.fault==quad::Fault::EmergencyCurrent) problem="EMERGENCY CURRENT";
+  else if(output.fault==quad::Fault::Overcurrent) problem="STALL CURRENT";
+  else if(output.fault==quad::Fault::NoLoad) problem="NO LOAD";
+  else if(output.fault==quad::Fault::Direction) problem="DIRECTION INPUT";
+  else if(output.fault==quad::Fault::Sensor) problem="SENSOR FAULT";
+  else if(motorHot || gearboxHot) problem=motorHot?"MOTOR HOT":"GEARBOX HOT";
+  else if(loadProtection.derating()) problem="CURRENT LIMIT";
+  if(problem) {
+    display.setFont(u8g2_font_6x10_tf);
+    display.drawStr(2,60,problem);
+  } else {
+    const unsigned pwmPct=static_cast<unsigned>(output.duty*100UL/config::PWM_RANGE);
+    display.setFont(u8g2_font_5x7_tf);
+    snprintf(line,sizeof(line),"PWM %u%%",pwmPct);
+    display.drawStr(2,59,line);
+    const uint8_t fill=static_cast<uint8_t>(output.duty*71UL/config::PWM_RANGE);
+    if(fill)display.drawBox(55,53,fill,9);
   }
-  display.drawStr(0,58,line);display.sendBuffer();
+  display.sendBuffer();
 }
 void setup() {
   digitalWrite(config::ENABLE_PIN,LOW);pinMode(config::ENABLE_PIN,OUTPUT);
@@ -633,8 +660,8 @@ void loop() {
     if(!wifi)remoteHeld=false;
 
     chargerPresent=voltageGuard.inhibited();
-    adc=readDirectionAdc();
-    physicalDirection=quad::decodeDirection(adc,config::FORWARD_MIN,config::FORWARD_MAX,config::REVERSE_MIN,config::REVERSE_MAX);
+    adc=settings.directionMode==0 ? readDirectionAdc() : 0;
+    physicalDirection=quad::directionFromMode(settings.directionMode,adc,config::FORWARD_MIN,config::FORWARD_MAX,config::REVERSE_MIN,config::REVERSE_MAX);
     quad::Input input;
     input.physicalPressed=pedal;input.wifiPressed=wifi;input.charger=chargerPresent || otaBusy;
     input.physicalDirection=physicalDirection;input.wifiDirection=remoteDirection;
