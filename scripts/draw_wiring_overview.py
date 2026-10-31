@@ -101,14 +101,8 @@ wire([(1730,1540),(1778,1540),(1778,635),(1800,635)],'pwm',5)
 wire([(1730,1580),(1795,1580),(1795,675),(1800,675)],'en',5)
 wire([(1795,675),(1825,675),(1825,715),(1800,715)],'en',5)
 dot(1795,675,'en')
-# Three passive 10k control pulldowns (boot/noise defaults). They do NOT replace D8 enable control.
-for px,py,from_x,from_y,net in [(1810,1500,1760,1500,'pwm'),
-                                   (1845,1540,1778,1540,'pwm'),
-                                   (1880,1580,1795,1580,'en')]:
- wire([(from_x,from_y),(px,py),(px,1778)],net,4)
- resistor(px,1778,'10k','v',net)
- wire([(px,1832),(px,2020)],'gnd',4)
- dot(px,from_y,net)
+# The purchased HW-039 has onboard RPWM, LPWM, R_EN and L_EN pulldowns.
+# No external resistors on these four control inputs.
 # Motor-driver enable pad is low at ESP8266 boot; both R_EN/L_EN tied to D8.
 # INA shunt sense and bus voltage. Each input directly at shunt Kelvin screw;
 # dashed for low current *sense* wires, separate from motor power path.
@@ -194,7 +188,7 @@ pin(2270,770,'VCC = 3V3','v3','right');pin(2270,815,'GND','gnd','right')
 # relocate already routed 3v3/gnd to right pins with short wire (do not leave left ghosts)
 # (No hidden board-internal cross-wires; VCC/GND are supplied on the right pins.)
 L('R_IS / L_IS: NC (unused)',1830,835,17,'muted')
-L('Onboard bulk capacitor: keep',1830,865,16,'muted')
+L('Onboard PWM / EN pull-downs',1830,865,16,'muted')
 L('BTS7960: two halves, ONE motor',1830,545,16,'muted')
 block(2560,325,320,330,'DC MOTOR','Original 6V • PWM from 12V','motor1')
 pin(2560,425,'M+','motor1');pin(2560,505,'M−','motor2')

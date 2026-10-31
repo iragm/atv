@@ -20,13 +20,13 @@ ESP8266 D1 mini controls one motor through an **HW-039 / IBT-2**. Phone dashboar
 | **D0** | Throttle button to GND; external **10kΩ pullup to 3V3** |
 | **D1 / D2** | I²C **SCL / SDA** to both INA226 and OLED |
 | **D4** | Both DS18B20 DATA wires; **4.7kΩ pullup to 3V3** |
-| **D5 / D6** | HW-039 **RPWM / LPWM**, each with **10kΩ pulldown** to GND |
-| **D8** | HW-039 **R_EN and L_EN tied together**, with **10kΩ pulldown** to GND |
+| **D5 / D6** | HW-039 **RPWM / LPWM** (onboard pulldowns; no external resistors) |
+| **D8** | HW-039 **R_EN and L_EN tied together** (onboard pulldowns) |
 | **A0** | Direction switch resistor ladder (below) |
 | D7 | Spare; no charger-jack switch contact |
 | D3, RX, TX | Leave unused (boot and USB serial) |
 
-**HW-039:** RPWM and LPWM control the *two halves of the same motor bridge*. Both are needed for forward/reverse. R_EN/L_EN are driver enables; D8 keeps them software-controlled rather than permanently ON. Leave R_IS/L_IS unconnected. The purchased board has an **SN74HC244**. Use **3.3V at its VCC header only after confirming that header powers the buffer**. Keep its onboard electrolytic; no extra bulk capacitor in the first build.
+**HW-039:** RPWM and LPWM control the *two halves of the same motor bridge*. Both are needed for forward/reverse. R_EN/L_EN are driver enables; D8 keeps them software-controlled rather than permanently ON. Leave R_IS/L_IS unconnected. The purchased board has an **SN74HC244** and pulldowns on all four control inputs; **omit the three external 10kΩ pulldowns**. Use **3.3V at its VCC header only after confirming that header powers the buffer**. Keep its onboard electrolytic; no extra bulk capacitor in the first build.
 
 ### Power, switch and lights
 
@@ -65,7 +65,7 @@ Motor-branch current is measured; charger current and accessories are not. When 
 | [SSD1306 I²C OLED](https://www.google.com/search?q=SSD1306+128x64+i2c+oled) | 1 optional | [Find](https://www.google.com/search?q=SSD1306+0.96) |
 | [12V AGM battery and smart charger](https://www.google.com/search?q=12V+AGM+battery+smart+charger) | 1 each | [Find](https://www.google.com/search?q=AGM+smart+charger+12V) |
 | [DC-rated center-off DPDT, throttle, 2-wire jack](https://www.google.com/search?q=DC+DPDT+on+off+on+switch+barrel+jack) | 1 each | [Find](https://www.google.com/search?q=DPDT+center+off+DC+switch) |
-| 10kΩ × **7**, 1kΩ × 1, 4.7kΩ × 1; branch fuses and wire | as needed | [Find](https://www.google.com/search?q=resistor+kit+inline+fuse+holder) |
+| 10kΩ × **4**, 1kΩ × 1, 4.7kΩ × 1; branch fuses and wire | as needed | [Find](https://www.google.com/search?q=resistor+kit+inline+fuse+holder) |
 
 I²C modules often have their own pullups. If neither does, add 4.7kΩ from each of SDA and SCL to 3V3. Don't tie I²C to 5V.
 

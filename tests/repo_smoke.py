@@ -31,3 +31,8 @@ for component in ('12V AGM BATTERY', '3-POSITION DPDT', '50A / 75mV', 'HW-039 / 
     assert component in svg, component
 for sense in ('IN+', 'IN−', 'VBUS', 'K+', 'K−', 'R_EN', 'L_EN', '3V3', '5V', 'GND', 'RPWM', 'LPWM'):
     assert sense in svg, sense
+
+# HW-039 already carries RPWM/LPWM/enable pulldowns; don't draw duplicates.
+assert 'Onboard PWM / EN pull-downs' in svg
+assert 'Three passive 10k control pulldowns' not in (ROOT / 'scripts/draw_wiring_overview.py').read_text()
+assert '10kΩ × **4**' in README
